@@ -40,10 +40,14 @@ import org.whispersystems.signalservice.api.push.exceptions.NetworkFailureExcept
 import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserException;
 import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
 
+import com.google.gson.Gson;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
@@ -73,6 +77,450 @@ public class Main {
         int res = handleCommands(ns);
         System.exit(res);
     }
+
+
+    private static class JsonRequestHandler {
+        private Manager m;
+        private Signal ts;
+        private Gson gson;
+
+
+        private class JsonRequest {
+			public String type;
+			public String messageBody;
+			public String recipientNumber;
+			JsonRequest() {
+			}
+        }
+
+
+        int sendMessage( JsonRequest req) {
+            if (!this.m.isRegistered()) {
+                System.err.println("JsonRequestHandler: User is not registered.");
+                return 1;
+            }
+
+            System.err.println("JsonRequestHandler: Send message: " + req.messageBody);
+
+            // if (ns.getBoolean("endsession")) {
+            //     if (ns.getList("recipient") == null) {
+            //         System.err.println("No recipients given");
+            //         System.err.println("Aborting sending.");
+            //         return 1;
+            //     }
+            //     try {
+            //         ts.sendEndSessionMessage(ns.<String>getList("recipient"));
+            //     } catch (IOException e) {
+            //         handleIOException(e);
+            //         return 3;
+            //     } catch (EncapsulatedExceptions e) {
+            //         handleEncapsulatedExceptions(e);
+            //         return 3;
+            //     } catch (AssertionError e) {
+            //         handleAssertionError(e);
+            //         return 1;
+            //     } catch (DBusExecutionException e) {
+            //         handleDBusExecutionException(e);
+            //         return 1;
+            //     }
+            // } else {
+            // if (messageText == null) {
+            //     try {
+            //         messageText = readAll(System.in);
+            //     } catch (IOException e) {
+            //         System.err.println("Failed to read message from stdin: " + e.getMessage());
+            //         System.err.println("Aborting sending.");
+            //         return 1;
+            //     }
+            // }
+
+			try {
+			    // List<String> attachments = ns.getList("attachment");
+			    // if (attachments == null) {
+			    //     attachments = new ArrayList<>();
+			    // }
+			    // if (ns.getString("group") != null) {
+			    //     byte[] groupId = decodeGroupId(ns.getString("group"));
+			    //     ts.sendGroupMessage(messageText, attachments, groupId);
+			    // } else {
+			    //     ts.sendMessage(messageText, attachments, ns.<String>getList("recipient"));
+			    // }
+			    List<String> attachments = new ArrayList<String>();
+			    ts.sendMessage( req.messageBody, attachments, req.recipientNumber);
+			} catch (IOException e) {
+				handleIOException(e);
+				return 3;
+			} catch (EncapsulatedExceptions e) {
+				handleEncapsulatedExceptions(e);
+				return 3;
+			} catch (AssertionError e) {
+				handleAssertionError(e);
+				return 1;
+			} catch (GroupNotFoundException e) {
+				handleGroupNotFoundException(e);
+				return 1;
+			} catch (NotAGroupMemberException e) {
+				handleNotAGroupMemberException(e);
+				return 1;
+			} catch (AttachmentInvalidException e) {
+			    System.err.println("Failed to add attachment: " + e.getMessage());
+				System.err.println("Aborting sending.");
+				return 1;
+			} catch (DBusExecutionException e) {
+				handleDBusExecutionException(e);
+				return 1;
+			}
+			return 0;
+		}
+
+		void handle( String line) {
+			//sendMessage(line);
+			JsonRequest req;
+			try {
+				req = this.gson.fromJson( line, JsonRequest.class);
+			} catch ( com.google.gson.JsonParseException e) {
+				System.err.println("ERROR: JsonRequestHandler: Failed to parse json: " + e.toString());
+				return;
+			}
+			if( req.type.equals("send")) {
+				sendMessage(req);
+			} else {
+				System.err.println("ERROR: Unknown JsonRequest type: '" + req.type + "'");
+			}
+		}
+
+		JsonRequestHandler( Manager m, Signal ts) {
+			this.m = m;
+			this.ts = ts;
+			this.gson = new Gson();
+		}
+	}
+
+	private static class JsonStdinReader implements Runnable {
+		JsonRequestHandler jsonRequestHandler = null;
+
+		public void run() {
+			BufferedReader br = new BufferedReader( new InputStreamReader( System.in));
+			while( true) {
+				String line=null;
+				try {
+					line = br.readLine();
+				} catch( IOException e) {
+					System.err.println("ERROR Reading stdin: " + e.toString());
+				}
+				this.jsonRequestHandler.handle(line);
+			}
+		}
+
+		JsonStdinReader( JsonRequestHandler j) {
+			this.jsonRequestHandler = j;
+		}
+	}
+
+
+    private static class ReceiveMessageHandlerJSON implements Manager.ReceiveMessageHandler {
+        final Manager m;
+        final Gson gson;
+
+		public ReceiveMessageHandlerJSON(Manager m) {
+			this.m = m;
+			this.gson = new Gson();
+		}
+
+		public class JsonMessageAttachmentInfo {
+			public String type;
+			public String context;
+				public long id;
+				public String relay;
+				public String filename;
+				public String contentType;
+				public long sizeBytes;
+				public String storedFilename;
+			JsonMessageAttachmentInfo() {
+			}
+		}
+
+		public class JsonMessage {
+			public String type;
+			public String senderNumber;
+			public String senderContactName = null;
+			public int senderSourceDevice;
+			public String relayedBy = null;
+			public String timestamp;
+			public long timestampEpoch;
+			public String messageBody;
+			public String groupId;
+			public String groupName;
+			public Collection<String> groupMembers;
+			public Collection<JsonMessageAttachmentInfo> attachments;
+			public long groupMessageExpireTime;
+			JsonMessage() {
+			}
+		}
+
+        @Override
+        public void handleMessage(SignalServiceEnvelope envelope, SignalServiceContent content, Throwable exception) {
+        	JsonMessage j = new JsonMessage();
+
+            SignalServiceAddress source = envelope.getSourceAddress();
+            ContactInfo sourceContact = m.getContact(source.getNumber());
+            System.out.println(String.format("Envelope from: %s (device: %d)", (sourceContact == null ? "" : "“" + sourceContact.name + "” ") + source.getNumber(), envelope.getSourceDevice()));
+            j.type = "message";
+            j.senderNumber = source.getNumber();
+            j.senderContactName = sourceContact == null ? null : sourceContact.name;
+            j.senderSourceDevice = envelope.getSourceDevice();
+            if (source.getRelay().isPresent()) {
+                System.out.println("Relayed by: " + source.getRelay().get());
+                j.relayedBy = source.getRelay().get();
+            }
+            System.out.println("Timestamp: " + formatTimestamp(envelope.getTimestamp()));
+            j.timestampEpoch = envelope.getTimestamp();
+            j.timestamp = formatTimestampISO(envelope.getTimestamp());
+
+            if (envelope.isReceipt()) {
+                System.out.println("Got receipt.");
+                j.type = "receipt";
+            } else if (envelope.isSignalMessage() | envelope.isPreKeySignalMessage()) {
+                if (exception != null) {
+                    if (exception instanceof org.whispersystems.libsignal.UntrustedIdentityException) {
+                        org.whispersystems.libsignal.UntrustedIdentityException e = (org.whispersystems.libsignal.UntrustedIdentityException) exception;
+                        System.out.println("The user’s key is untrusted, either the user has reinstalled Signal or a third party sent this message.");
+                        System.out.println("Use 'signal-cli -u " + m.getUsername() + " listIdentities -n " + e.getName() + "', verify the key and run 'signal-cli -u " + m.getUsername() + " trust -v \"FINGER_PRINT\" " + e.getName() + "' to mark it as trusted");
+                        System.out.println("If you don't care about security, use 'signal-cli -u " + m.getUsername() + " trust -a " + e.getName() + "' to trust it without verification");
+                    } else {
+                        System.out.println("Exception: " + exception.getMessage() + " (" + exception.getClass().getSimpleName() + ")");
+                    }
+                }
+                if (content == null) {
+                    System.out.println("Failed to decrypt message.");
+                } else {
+                    if (content.getDataMessage().isPresent()) {
+                        SignalServiceDataMessage message = content.getDataMessage().get();
+                        handleSignalServiceDataMessage(message, j);
+                    }
+                    if (content.getSyncMessage().isPresent()) {
+                        System.out.println("Received a sync message");
+                        SignalServiceSyncMessage syncMessage = content.getSyncMessage().get();
+
+                        if (syncMessage.getContacts().isPresent()) {
+                            final ContactsMessage contactsMessage = syncMessage.getContacts().get();
+                            if (contactsMessage.isComplete()) {
+                                System.out.println("Received complete sync contacts");
+                            } else {
+                                System.out.println("Received sync contacts");
+                            }
+                            printAttachment(contactsMessage.getContactsStream());
+                    		populateAttachmentList( j, contactsMessage.getContactsStream(), "contactStream");
+                        }
+                        if (syncMessage.getGroups().isPresent()) {
+                            System.out.println("Received sync groups");
+                            printAttachment(syncMessage.getGroups().get());
+                    		populateAttachmentList( j, syncMessage.getGroups().get(), "syncGroups");
+                        }
+                        if (syncMessage.getRead().isPresent()) {
+                            System.out.println("Received sync read messages list");
+                            for (ReadMessage rm : syncMessage.getRead().get()) {
+                                ContactInfo fromContact = m.getContact(rm.getSender());
+                                System.out.println("From: " + (fromContact == null ? "" : "“" + fromContact.name + "” ") + rm.getSender() + " Message timestamp: " + formatTimestamp(rm.getTimestamp()));
+                            }
+                        }
+                        if (syncMessage.getRequest().isPresent()) {
+                            System.out.println("Received sync request");
+                            if (syncMessage.getRequest().get().isContactsRequest()) {
+                                System.out.println(" - contacts request");
+                            }
+                            if (syncMessage.getRequest().get().isGroupsRequest()) {
+                                System.out.println(" - groups request");
+                            }
+                        }
+                        if (syncMessage.getSent().isPresent()) {
+                            System.out.println("Received sync sent message");
+                            final SentTranscriptMessage sentTranscriptMessage = syncMessage.getSent().get();
+                            String to;
+                            if (sentTranscriptMessage.getDestination().isPresent()) {
+                                String dest = sentTranscriptMessage.getDestination().get();
+                                ContactInfo destContact = m.getContact(dest);
+                                to = (destContact == null ? "" : "“" + destContact.name + "” ") + dest;
+                            } else {
+                                to = "Unknown";
+                            }
+                            System.out.println("To: " + to + " , Message timestamp: " + formatTimestamp(sentTranscriptMessage.getTimestamp()));
+                            if (sentTranscriptMessage.getExpirationStartTimestamp() > 0) {
+                                System.out.println("Expiration started at: " + formatTimestamp(sentTranscriptMessage.getExpirationStartTimestamp()));
+                            }
+                            SignalServiceDataMessage message = sentTranscriptMessage.getMessage();
+                            handleSignalServiceDataMessage(message, j);
+                        }
+                        if (syncMessage.getBlockedList().isPresent()) {
+                            System.out.println("Received sync message with block list");
+                            System.out.println("Blocked numbers:");
+                            final BlockedListMessage blockedList = syncMessage.getBlockedList().get();
+                            for (String number : blockedList.getNumbers()) {
+                                System.out.println(" - " + number);
+                            }
+                        }
+                    }
+                }
+            } else {
+                System.out.println("Unknown message received.");
+                j.type = "unknown";
+            }
+            System.out.println();
+
+            System.out.println( this.gson.toJson(j));
+        }
+
+        private void handleSignalServiceDataMessage(SignalServiceDataMessage message, JsonMessage j) {
+            System.out.println("Message timestamp: " + formatTimestamp(message.getTimestamp()));
+
+            if (message.getBody().isPresent()) {
+                System.out.println("Body: " + message.getBody().get());
+                j.messageBody = message.getBody().get();
+            }
+            if (message.getGroupInfo().isPresent()) {
+            	j.type = "groupInfo";
+                SignalServiceGroup groupInfo = message.getGroupInfo().get();
+                System.out.println("Group info:");
+                System.out.println("  Id: " + Base64.encodeBytes(groupInfo.getGroupId()));
+                j.groupId = Base64.encodeBytes(groupInfo.getGroupId());
+                if (groupInfo.getType() == SignalServiceGroup.Type.UPDATE && groupInfo.getName().isPresent()) {
+                    System.out.println("  Name: " + groupInfo.getName().get());
+                    j.groupName = groupInfo.getName().get();
+                } else {
+                    GroupInfo group = m.getGroup(groupInfo.getGroupId());
+                    if (group != null) {
+                        System.out.println("  Name: " + group.name);
+	                    j.groupName = group.name;
+                    } else {
+                        System.out.println("  Name: <Unknown group>");
+	                    j.groupName = "Unknown group";
+                    }
+                }
+                System.out.println("  Type: " + groupInfo.getType());
+                if (groupInfo.getMembers().isPresent()) {
+                	j.groupMembers = new ArrayList<String>();
+                    for (String member : groupInfo.getMembers().get()) {
+                        System.out.println("  Member: " + member);
+                        j.groupMembers.add(member);
+                    }
+                }
+                if (groupInfo.getAvatar().isPresent()) {
+                    System.out.println("  Avatar:");
+                    printAttachment(groupInfo.getAvatar().get());
+                    populateAttachmentList( j, groupInfo.getAvatar().get(), "avatar");
+                }
+            }
+            if (message.isEndSession()) {
+                System.out.println("Is end session");
+            }
+            if (message.isExpirationUpdate()) {
+                System.out.println("Is Expiration update: " + message.isExpirationUpdate());
+            }
+            if (message.getExpiresInSeconds() > 0) {
+                System.out.println("Expires in: " + message.getExpiresInSeconds() + " seconds");
+                j.groupMessageExpireTime = message.getExpiresInSeconds();
+            }
+
+            if (message.getAttachments().isPresent()) {
+                System.out.println("Attachments: ");
+                for (SignalServiceAttachment attachment : message.getAttachments().get()) {
+                    printAttachment(attachment);
+                    populateAttachmentList( j, attachment, "attachment");
+                }
+            }
+        }
+
+        private void populateAttachmentList( JsonMessage j, SignalServiceAttachment a, String context) {
+			if(j.attachments == null) {
+				j.attachments = new ArrayList<JsonMessageAttachmentInfo>();
+			}
+			JsonMessageAttachmentInfo i = new JsonMessageAttachmentInfo();
+			if( a.isPointer()) {
+				i.type = "pointer";
+			} else if( a.isStream()) {
+				i.type = "stream";
+			} else {
+				i.type = "unknown";
+			}
+			i.context = context;
+			i.contentType = a.getContentType();
+			if( a.isPointer()) {
+				final SignalServiceAttachmentPointer ptr = a.asPointer();
+				i.id = ptr.getId();
+				if( ptr.getRelay().isPresent()) 
+					i.relay = ptr.getRelay().get();
+				if( ptr.getFileName().isPresent())
+					i.filename = ptr.getFileName().get();
+				else
+					i.filename = "-";
+				if( ptr.getSize().isPresent())
+					i.sizeBytes = ptr.getSize().get();
+				File file = m.getAttachmentFile(ptr.getId());
+				if( file.exists()) {
+					i.storedFilename = file.toString();
+				}
+			}
+			j.attachments.add(i);
+        }
+
+        private void printAttachment(SignalServiceAttachment attachment) {
+            System.out.println("- " + attachment.getContentType() + " (" + (attachment.isPointer() ? "Pointer" : "") + (attachment.isStream() ? "Stream" : "") + ")");
+            if (attachment.isPointer()) {
+                final SignalServiceAttachmentPointer pointer = attachment.asPointer();
+                System.out.println("  Id: " + pointer.getId() + " Key length: " + pointer.getKey().length + (pointer.getRelay().isPresent() ? " Relay: " + pointer.getRelay().get() : ""));
+                System.out.println("  Filename: " + (pointer.getFileName().isPresent() ? pointer.getFileName().get() : "-"));
+                System.out.println("  Size: " + (pointer.getSize().isPresent() ? pointer.getSize().get() + " bytes" : "<unavailable>") + (pointer.getPreview().isPresent() ? " (Preview is available: " + pointer.getPreview().get().length + " bytes)" : ""));
+                System.out.println("  Voice note: " + (pointer.getVoiceNote() ? "yes" : "no"));
+                File file = m.getAttachmentFile(pointer.getId());
+                if (file.exists()) {
+                    System.out.println("  Stored plaintext in: " + file);
+                }
+            }
+        }
+    }
+
+
+
+    private static int jsonEvtLoop( Namespace ns, Manager m, Signal ts) {
+        if (!m.isRegistered()) {
+            //System.err.println("User is not registered.");
+            System.out.println("{\"type\": \"error\", \"error\": \"USER_NOT_REGISTERED\", \"message\": \"User not registered\" }");
+            return 1;
+        }
+
+        // Start stdin reader thread
+        JsonRequestHandler jhandler = new JsonRequestHandler( m, ts);
+        JsonStdinReader reader = new JsonStdinReader( jhandler);
+        Thread jsonStdinReaderThread = new Thread( reader);
+        jsonStdinReaderThread.start();
+
+        double timeout = 30;
+        if (ns.getDouble("timeout") != null) {
+            timeout = ns.getDouble("timeout");
+        }
+        boolean returnOnTimeout = true;
+        if (timeout < 0) {
+            returnOnTimeout = false;
+            timeout = 3600;
+        }
+        boolean ignoreAttachments = false;
+        if( ns.getBoolean("ignore_attachments") != null) {
+            ignoreAttachments = ns.getBoolean("ignore_attachments");
+        }
+        try {
+            m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandlerJSON(m));
+        } catch (IOException e) {
+            //System.err.println("Error while receiving messages: " + e.getMessage());
+            System.out.println("{\"type\": \"error\", \"error\": \"ERROR_RECEIVING\", \"message\": \"Error while receiving messages: " + e.getMessage() + "\" }");
+            return 3;
+        } catch (AssertionError e) {
+            handleAssertionError(e);
+            return 1;
+        }        
+
+        return 0;
+    }
+
 
     private static int handleCommands(Namespace ns) {
         final String username = ns.getString("username");
@@ -128,6 +576,11 @@ public class Main {
             }
 
             switch (ns.getString("command")) {
+
+                case "jsonevtloop":
+                    int r = jsonEvtLoop( ns, m, ts);
+                    break;
+
                 case "register":
                     if (dBusConn != null) {
                         System.err.println("register is not yet implemented via dbus");
@@ -743,6 +1196,9 @@ public class Main {
 
         Subparser parserDevices = subparsers.addParser("listDevices");
 
+        // KBIN
+        Subparser parserJSONevtLoop = subparsers.addParser("jsonevtloop");
+
         Subparser parserRemoveDevice = subparsers.addParser("removeDevice");
         parserRemoveDevice.addArgument("-d", "--deviceId")
                 .type(int.class)
@@ -1115,4 +1571,12 @@ public class Main {
         df.setTimeZone(tzUTC);
         return timestamp + " (" + df.format(date) + ")";
     }
+
+    private static String formatTimestampISO(long timestamp) {
+        Date date = new Date(timestamp);
+        final DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"); // Quoted "Z" to indicate UTC, no timezone offset
+        df.setTimeZone(tzUTC);
+        return df.format(date);
+    }
+
 }
