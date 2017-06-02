@@ -93,7 +93,25 @@ public class Main {
 			}
         }
 
+        private class JsonErrorMessage {
+        	public String type;
+        	public String error;		// Error name (fixed string)
+        	public String message;		// Human readable error message
+        	public String subject;		// Number or otherwise context relevant information about the error
+        	JsonErrorMessage( String error, String message, String subject) {
+        		this.type = "error";
+        		this.error = error;
+        		this.message = message;
+        		this.subject = subject;
+        	}
+        }
 
+        void errorOutputJson( String error, String message, String subject) {
+        	JsonErrorMessage e = new JsonErrorMessage( error, message, subject);
+        	System.out.println( gson.toJson(e));
+        }
+
+        // Send Signal message
         int sendMessage( JsonRequest req) {
             if (!this.m.isRegistered()) {
                 System.err.println("JsonRequestHandler: User is not registered.");
@@ -152,27 +170,43 @@ public class Main {
 				return 3;
 			} catch (EncapsulatedExceptions e) {
 				handleEncapsulatedExceptions(e);
+				//errorOutputJson( "SEND_ERROR", "Failed to send message(EncapsulatedExceptions): " + e.toString());
+		        for (NetworkFailureException n : e.getNetworkExceptions()) {
+		            // System.err.println("Network failure for \"" + n.getE164number() + "\": " + n.getMessage());
+		            errorOutputJson( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number());
+		        }
+		        for (UnregisteredUserException n : e.getUnregisteredUserExceptions()) {
+		            // System.err.println("Unregistered user \"" + n.getE164Number() + "\": " + n.getMessage());
+		            errorOutputJson( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number());
+		        }
+		        for (UntrustedIdentityException n : e.getUntrustedIdentityExceptions()) {
+		            // System.err.println("Untrusted Identity for \"" + n.getE164Number() + "\": " + n.getMessage());
+		            errorOutputJson( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number());
+		        }
+
 				return 3;
 			} catch (AssertionError e) {
 				handleAssertionError(e);
+				errorOutputJson( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber);
 				return 1;
 			} catch (GroupNotFoundException e) {
 				handleGroupNotFoundException(e);
+				errorOutputJson( "SEND_ERROR", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber);
 				return 1;
 			} catch (NotAGroupMemberException e) {
 				handleNotAGroupMemberException(e);
+				errorOutputJson( "SEND_ERROR", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber);
 				return 1;
 			} catch (AttachmentInvalidException e) {
 			    System.err.println("Failed to add attachment: " + e.getMessage());
 				System.err.println("Aborting sending.");
-				return 1;
-			} catch (DBusExecutionException e) {
-				handleDBusExecutionException(e);
+				errorOutputJson( "SEND_ERROR", "Failed to add attachment: " + e.toString(), req.recipientNumber);
 				return 1;
 			}
 			return 0;
 		}
 
+		// Parse JSON and dispatch actions
 		void handle( String line) {
 			//sendMessage(line);
 			JsonRequest req;
@@ -196,6 +230,7 @@ public class Main {
 		}
 	}
 
+	// Thread to handle reading STDIN line-by-line and passing to JsonRequestHandler object	
 	private static class JsonStdinReader implements Runnable {
 		JsonRequestHandler jsonRequestHandler = null;
 
@@ -208,7 +243,8 @@ public class Main {
 				} catch( IOException e) {
 					System.err.println("ERROR Reading stdin: " + e.toString());
 				}
-				this.jsonRequestHandler.handle(line);
+				if( line != null && !line.equals(""))
+					this.jsonRequestHandler.handle(line);
 			}
 		}
 
@@ -217,7 +253,7 @@ public class Main {
 		}
 	}
 
-
+	// Handles incoming Signal messages and spits out JSON on STDOUT
     private static class ReceiveMessageHandlerJSON implements Manager.ReceiveMessageHandler {
         final Manager m;
         final Gson gson;
@@ -435,6 +471,7 @@ public class Main {
 				j.attachments = new ArrayList<JsonMessageAttachmentInfo>();
 			}
 			JsonMessageAttachmentInfo i = new JsonMessageAttachmentInfo();
+			//TODO: figure out what this means
 			if( a.isPointer()) {
 				i.type = "pointer";
 			} else if( a.isStream()) {
