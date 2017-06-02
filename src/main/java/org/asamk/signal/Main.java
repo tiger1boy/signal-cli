@@ -79,34 +79,34 @@ public class Main {
     }
 
 
-	public static class JsonErrorMessage {
-		public String type;
-	    public String id;
-		public String error;		// Error name (fixed string)
-		public String message;		// Human readable error message
-		public String subject;		// Number or otherwise context relevant information about the error
-		JsonErrorMessage( String error, String message, String subject) {
-			this.type = "error";
-			this.error = error;
-			this.message = message;
-			this.subject = subject;
-		}
+    public static class JsonErrorMessage {
+        public String type;
+        public String id;
+        public String error;        // Error name (fixed string)
+        public String message;      // Human readable error message
+        public String subject;      // Number or otherwise context relevant information about the error
+        JsonErrorMessage( String error, String message, String subject) {
+            this.type = "error";
+            this.error = error;
+            this.message = message;
+            this.subject = subject;
+        }
 
-	    JsonErrorMessage( String error, String message, String subject, String id) {
-			this.type = "error";
-			this.id = id;
-			this.error = error;
-			this.message = message;
-			this.subject = subject;                
-	    }
+        JsonErrorMessage( String error, String message, String subject, String id) {
+            this.type = "error";
+            this.id = id;
+            this.error = error;
+            this.message = message;
+            this.subject = subject;                
+        }
 
-	    public void printStderr() {
-			Gson gson;
-//	    	if(gson == null)
-	    		gson = new Gson();
-	        System.out.println( gson.toJson(this));
-	    }
-	}
+        public void printStderr() {
+            Gson gson;
+//          if(gson == null)
+                gson = new Gson();
+            System.out.println( gson.toJson(this));
+        }
+    }
 
     private static class JsonRequestHandler {
         private Manager m;
@@ -115,199 +115,199 @@ public class Main {
 
 
         private class JsonRequest {
-			public String type;
+            public String type;
             public String id;
-			public String messageBody;
-			public String recipientNumber;
-			JsonRequest() {
-			}
+            public String messageBody;
+            public String recipientNumber;
+            JsonRequest() {
+            }
         }
 
 
         // Send Signal message
-		int sendMessage( JsonRequest req) {
-			if (!this.m.isRegistered()) {
-				new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered", null, req.id).printStderr();
-				return 1;
-			}
+        int sendMessage( JsonRequest req) {
+            if (!this.m.isRegistered()) {
+                new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered", null, req.id).printStderr();
+                return 1;
+            }
 
             System.err.println("JsonRequestHandler: Send message: " + req.messageBody);
 
-			// if (ns.getBoolean("endsession")) {
-			//     if (ns.getList("recipient") == null) {
-			//         System.err.println("No recipients given");
-			//         System.err.println("Aborting sending.");
-			//         return 1;
-			//     }
-			//     try {
-			//         ts.sendEndSessionMessage(ns.<String>getList("recipient"));
-			//     } catch (IOException e) {
-			//         handleIOException(e);
-			//         return 3;
-			//     } catch (EncapsulatedExceptions e) {
-			//         handleEncapsulatedExceptions(e);
-			//         return 3;
-			//     } catch (AssertionError e) {
-			//         handleAssertionError(e);
-			//         return 1;
-			//     } catch (DBusExecutionException e) {
-			//         handleDBusExecutionException(e);
-			//         return 1;
-			//     }
-			// } else {
+            // if (ns.getBoolean("endsession")) {
+            //     if (ns.getList("recipient") == null) {
+            //         System.err.println("No recipients given");
+            //         System.err.println("Aborting sending.");
+            //         return 1;
+            //     }
+            //     try {
+            //         ts.sendEndSessionMessage(ns.<String>getList("recipient"));
+            //     } catch (IOException e) {
+            //         handleIOException(e);
+            //         return 3;
+            //     } catch (EncapsulatedExceptions e) {
+            //         handleEncapsulatedExceptions(e);
+            //         return 3;
+            //     } catch (AssertionError e) {
+            //         handleAssertionError(e);
+            //         return 1;
+            //     } catch (DBusExecutionException e) {
+            //         handleDBusExecutionException(e);
+            //         return 1;
+            //     }
+            // } else {
 
-			try {
-			    // List<String> attachments = ns.getList("attachment");
-			    // if (attachments == null) {
-			    //     attachments = new ArrayList<>();
-			    // }
-			    // if (ns.getString("group") != null) {
-			    //     byte[] groupId = decodeGroupId(ns.getString("group"));
-			    //     ts.sendGroupMessage(messageText, attachments, groupId);
-			    // } else {
-			    //     ts.sendMessage(messageText, attachments, ns.<String>getList("recipient"));
-			    // }
-			    List<String> attachments = new ArrayList<String>();
-			    ts.sendMessage( req.messageBody, attachments, req.recipientNumber);
-			} catch (IOException e) {
-				//handleIOException(e);
-				new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req.id).printStderr();
-				return 3;
-			} catch (EncapsulatedExceptions e) {
-				// handleEncapsulatedExceptions(e);
-				//errorOutputJson( "SEND_ERROR", "Failed to send message(EncapsulatedExceptions): " + e.toString());
-		        for (NetworkFailureException n : e.getNetworkExceptions()) {
-		            // System.err.println("Network failure for \"" + n.getE164number() + "\": " + n.getMessage());
-		            new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req.id).printStderr();
-		        }
-		        for (UnregisteredUserException n : e.getUnregisteredUserExceptions()) {
-		            // System.err.println("Unregistered user \"" + n.getE164Number() + "\": " + n.getMessage());
-		            new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
-		        }
-		        for (UntrustedIdentityException n : e.getUntrustedIdentityExceptions()) {
-		            // System.err.println("Untrusted Identity for \"" + n.getE164Number() + "\": " + n.getMessage());
-		            new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
-		        }
+            try {
+                // List<String> attachments = ns.getList("attachment");
+                // if (attachments == null) {
+                //     attachments = new ArrayList<>();
+                // }
+                // if (ns.getString("group") != null) {
+                //     byte[] groupId = decodeGroupId(ns.getString("group"));
+                //     ts.sendGroupMessage(messageText, attachments, groupId);
+                // } else {
+                //     ts.sendMessage(messageText, attachments, ns.<String>getList("recipient"));
+                // }
+                List<String> attachments = new ArrayList<String>();
+                ts.sendMessage( req.messageBody, attachments, req.recipientNumber);
+            } catch (IOException e) {
+                //handleIOException(e);
+                new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req.id).printStderr();
+                return 3;
+            } catch (EncapsulatedExceptions e) {
+                // handleEncapsulatedExceptions(e);
+                //errorOutputJson( "SEND_ERROR", "Failed to send message(EncapsulatedExceptions): " + e.toString());
+                for (NetworkFailureException n : e.getNetworkExceptions()) {
+                    // System.err.println("Network failure for \"" + n.getE164number() + "\": " + n.getMessage());
+                    new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req.id).printStderr();
+                }
+                for (UnregisteredUserException n : e.getUnregisteredUserExceptions()) {
+                    // System.err.println("Unregistered user \"" + n.getE164Number() + "\": " + n.getMessage());
+                    new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
+                }
+                for (UntrustedIdentityException n : e.getUntrustedIdentityExceptions()) {
+                    // System.err.println("Untrusted Identity for \"" + n.getE164Number() + "\": " + n.getMessage());
+                    new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
+                }
 
-				return 3;
-			} catch (AssertionError e) {
-				// handleAssertionError(e);
-				new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req.id).printStderr();
-				return 1;
-			} catch (GroupNotFoundException e) {
-				// handleGroupNotFoundException(e);
-				new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req.id).printStderr();
-				return 1;
-			} catch (NotAGroupMemberException e) {
-				// handleNotAGroupMemberException(e);
-				new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req.id).printStderr();
-				return 1;
-			} catch (AttachmentInvalidException e) {
-				// System.err.println("Failed to add attachment: " + e.getMessage());
-				// System.err.println("Aborting sending.");
-				new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req.id).printStderr();
-				return 1;
-			}
-			return 0;
-		}
+                return 3;
+            } catch (AssertionError e) {
+                // handleAssertionError(e);
+                new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req.id).printStderr();
+                return 1;
+            } catch (GroupNotFoundException e) {
+                // handleGroupNotFoundException(e);
+                new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req.id).printStderr();
+                return 1;
+            } catch (NotAGroupMemberException e) {
+                // handleNotAGroupMemberException(e);
+                new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req.id).printStderr();
+                return 1;
+            } catch (AttachmentInvalidException e) {
+                // System.err.println("Failed to add attachment: " + e.getMessage());
+                // System.err.println("Aborting sending.");
+                new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req.id).printStderr();
+                return 1;
+            }
+            return 0;
+        }
 
-		// Parse JSON and dispatch actions
-		void handle( String line) {
-			//sendMessage(line);
-			JsonRequest req;
-			try {
-				req = this.gson.fromJson( line, JsonRequest.class);
-			} catch ( com.google.gson.JsonParseException e) {
-				System.err.println("ERROR: JsonRequestHandler: Failed to parse json: " + e.toString());
-				return;
-			}
-			switch( req.type) {
-				case "send":
-					sendMessage(req);
-					break;
-				case "exit":
-					System.err.println("signal-cli: Exiting event loop on exit command");
-					System.exit(0);
-					break;
-				default:
-					System.err.println("ERROR: Unknown JsonRequest type '" + req.type + "'");
-			}
-		}
+        // Parse JSON and dispatch actions
+        void handle( String line) {
+            //sendMessage(line);
+            JsonRequest req;
+            try {
+                req = this.gson.fromJson( line, JsonRequest.class);
+            } catch ( com.google.gson.JsonParseException e) {
+                System.err.println("ERROR: JsonRequestHandler: Failed to parse json: " + e.toString());
+                return;
+            }
+            switch( req.type) {
+                case "send":
+                    sendMessage(req);
+                    break;
+                case "exit":
+                    System.err.println("signal-cli: Exiting event loop on exit command");
+                    System.exit(0);
+                    break;
+                default:
+                    System.err.println("ERROR: Unknown JsonRequest type '" + req.type + "'");
+            }
+        }
 
-		JsonRequestHandler( Manager m, Signal ts) {
-			this.m = m;
-			this.ts = ts;
-			this.gson = new Gson();
-		}
-	}
+        JsonRequestHandler( Manager m, Signal ts) {
+            this.m = m;
+            this.ts = ts;
+            this.gson = new Gson();
+        }
+    }
 
-	// Thread to handle reading STDIN line-by-line and passing to JsonRequestHandler object	
-	private static class JsonStdinReader implements Runnable {
-		JsonRequestHandler jsonRequestHandler = null;
+    // Thread to handle reading STDIN line-by-line and passing to JsonRequestHandler object 
+    private static class JsonStdinReader implements Runnable {
+        JsonRequestHandler jsonRequestHandler = null;
 
-		public void run() {
-			BufferedReader br = new BufferedReader( new InputStreamReader( System.in));
-			while( true) {
-				String line=null;
-				try {
-					line = br.readLine();
-				} catch( IOException e) {
-					System.err.println("ERROR Reading stdin: " + e.toString());
-				}
-				if( line != null && !line.equals(""))
-					this.jsonRequestHandler.handle(line);
-			}
-		}
+        public void run() {
+            BufferedReader br = new BufferedReader( new InputStreamReader( System.in));
+            while( true) {
+                String line=null;
+                try {
+                    line = br.readLine();
+                } catch( IOException e) {
+                    System.err.println("ERROR Reading stdin: " + e.toString());
+                }
+                if( line != null && !line.equals(""))
+                    this.jsonRequestHandler.handle(line);
+            }
+        }
 
-		JsonStdinReader( JsonRequestHandler j) {
-			this.jsonRequestHandler = j;
-		}
-	}
+        JsonStdinReader( JsonRequestHandler j) {
+            this.jsonRequestHandler = j;
+        }
+    }
 
-	// Handles incoming Signal messages and spits out JSON on STDOUT
+    // Handles incoming Signal messages and spits out JSON on STDOUT
     private static class ReceiveMessageHandlerJSON implements Manager.ReceiveMessageHandler {
         final Manager m;
         final Gson gson;
 
-		public ReceiveMessageHandlerJSON(Manager m) {
-			this.m = m;
-			this.gson = new Gson();
-		}
+        public ReceiveMessageHandlerJSON(Manager m) {
+            this.m = m;
+            this.gson = new Gson();
+        }
 
-		public class JsonMessageAttachmentInfo {
-			public String type;
-			public String context;
-				public long id;
-				public String relay;
-				public String filename;
-				public String contentType;
-				public long sizeBytes;
-				public String storedFilename;
-			JsonMessageAttachmentInfo() {
-			}
-		}
+        public class JsonMessageAttachmentInfo {
+            public String type;
+            public String context;
+                public long id;
+                public String relay;
+                public String filename;
+                public String contentType;
+                public long sizeBytes;
+                public String storedFilename;
+            JsonMessageAttachmentInfo() {
+            }
+        }
 
-		public class JsonMessage {
-			public String type;
-			public String senderNumber;
-			public String senderContactName = null;
-			public int senderSourceDevice;
-			public String relayedBy = null;
-			public String timestamp;
-			public long timestampEpoch;
-			public String messageBody;
-			public String groupId;
-			public String groupName;
-			public Collection<String> groupMembers;
-			public Collection<JsonMessageAttachmentInfo> attachments;
-			public long groupMessageExpireTime;
-			JsonMessage() {
-			}
-		}
+        public class JsonMessage {
+            public String type;
+            public String senderNumber;
+            public String senderContactName = null;
+            public int senderSourceDevice;
+            public String relayedBy = null;
+            public String timestamp;
+            public long timestampEpoch;
+            public String messageBody;
+            public String groupId;
+            public String groupName;
+            public Collection<String> groupMembers;
+            public Collection<JsonMessageAttachmentInfo> attachments;
+            public long groupMessageExpireTime;
+            JsonMessage() {
+            }
+        }
 
         @Override
         public void handleMessage(SignalServiceEnvelope envelope, SignalServiceContent content, Throwable exception) {
-        	JsonMessage j = new JsonMessage();
+            JsonMessage j = new JsonMessage();
 
             SignalServiceAddress source = envelope.getSourceAddress();
             ContactInfo sourceContact = m.getContact(source.getNumber());
@@ -357,12 +357,12 @@ public class Main {
                                 System.out.println("Received sync contacts");
                             }
                             printAttachment(contactsMessage.getContactsStream());
-                    		populateAttachmentList( j, contactsMessage.getContactsStream(), "contactStream");
+                            populateAttachmentList( j, contactsMessage.getContactsStream(), "contactStream");
                         }
                         if (syncMessage.getGroups().isPresent()) {
                             System.out.println("Received sync groups");
                             printAttachment(syncMessage.getGroups().get());
-                    		populateAttachmentList( j, syncMessage.getGroups().get(), "syncGroups");
+                            populateAttachmentList( j, syncMessage.getGroups().get(), "syncGroups");
                         }
                         if (syncMessage.getRead().isPresent()) {
                             System.out.println("Received sync read messages list");
@@ -425,7 +425,7 @@ public class Main {
                 j.messageBody = message.getBody().get();
             }
             if (message.getGroupInfo().isPresent()) {
-            	j.type = "groupInfo";
+                j.type = "groupInfo";
                 SignalServiceGroup groupInfo = message.getGroupInfo().get();
                 System.out.println("Group info:");
                 System.out.println("  Id: " + Base64.encodeBytes(groupInfo.getGroupId()));
@@ -437,15 +437,15 @@ public class Main {
                     GroupInfo group = m.getGroup(groupInfo.getGroupId());
                     if (group != null) {
                         System.out.println("  Name: " + group.name);
-	                    j.groupName = group.name;
+                        j.groupName = group.name;
                     } else {
                         System.out.println("  Name: <Unknown group>");
-	                    j.groupName = "Unknown group";
+                        j.groupName = "Unknown group";
                     }
                 }
                 System.out.println("  Type: " + groupInfo.getType());
                 if (groupInfo.getMembers().isPresent()) {
-                	j.groupMembers = new ArrayList<String>();
+                    j.groupMembers = new ArrayList<String>();
                     for (String member : groupInfo.getMembers().get()) {
                         System.out.println("  Member: " + member);
                         j.groupMembers.add(member);
@@ -478,37 +478,37 @@ public class Main {
         }
 
         private void populateAttachmentList( JsonMessage j, SignalServiceAttachment a, String context) {
-			if(j.attachments == null) {
-				j.attachments = new ArrayList<JsonMessageAttachmentInfo>();
-			}
-			JsonMessageAttachmentInfo i = new JsonMessageAttachmentInfo();
-			//TODO: figure out what this means
-			if( a.isPointer()) {
-				i.type = "pointer";
-			} else if( a.isStream()) {
-				i.type = "stream";
-			} else {
-				i.type = "unknown";
-			}
-			i.context = context;
-			i.contentType = a.getContentType();
-			if( a.isPointer()) {
-				final SignalServiceAttachmentPointer ptr = a.asPointer();
-				i.id = ptr.getId();
-				if( ptr.getRelay().isPresent()) 
-					i.relay = ptr.getRelay().get();
-				if( ptr.getFileName().isPresent())
-					i.filename = ptr.getFileName().get();
-				else
-					i.filename = "-";
-				if( ptr.getSize().isPresent())
-					i.sizeBytes = ptr.getSize().get();
-				File file = m.getAttachmentFile(ptr.getId());
-				if( file.exists()) {
-					i.storedFilename = file.toString();
-				}
-			}
-			j.attachments.add(i);
+            if(j.attachments == null) {
+                j.attachments = new ArrayList<JsonMessageAttachmentInfo>();
+            }
+            JsonMessageAttachmentInfo i = new JsonMessageAttachmentInfo();
+            //TODO: figure out what this means
+            if( a.isPointer()) {
+                i.type = "pointer";
+            } else if( a.isStream()) {
+                i.type = "stream";
+            } else {
+                i.type = "unknown";
+            }
+            i.context = context;
+            i.contentType = a.getContentType();
+            if( a.isPointer()) {
+                final SignalServiceAttachmentPointer ptr = a.asPointer();
+                i.id = ptr.getId();
+                if( ptr.getRelay().isPresent()) 
+                    i.relay = ptr.getRelay().get();
+                if( ptr.getFileName().isPresent())
+                    i.filename = ptr.getFileName().get();
+                else
+                    i.filename = "-";
+                if( ptr.getSize().isPresent())
+                    i.sizeBytes = ptr.getSize().get();
+                File file = m.getAttachmentFile(ptr.getId());
+                if( file.exists()) {
+                    i.storedFilename = file.toString();
+                }
+            }
+            j.attachments.add(i);
         }
 
         private void printAttachment(SignalServiceAttachment attachment) {
@@ -545,29 +545,29 @@ public class Main {
         Boolean exitNow = false;
 
         while( !exitNow) {
-        	System.out.println("{\"type\":\"evtloop_start\"}");
-	        double timeout = 120;
-	        if (ns.getDouble("timeout") != null) {
-	            timeout = ns.getDouble("timeout");
-	        }
-	        boolean returnOnTimeout = true;
-	        if (timeout < 0) {
-	            returnOnTimeout = false;
-	            timeout = 3600;
-	        }
-	        boolean ignoreAttachments = false;
-	        if( ns.getBoolean("ignore_attachments") != null) {
-	            ignoreAttachments = ns.getBoolean("ignore_attachments");
-	        }
-	        try {
-	            m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandlerJSON(m));
-	        } catch (IOException e) {
-	            //System.err.println("Error while receiving messages: " + e.getMessage());
-	            //System.out.println("{\"type\": \"error\", \"error\": \"ERROR_RECEIVING\", \"message\": \"Error while receiving messages: " + e.getMessage() + "\" }");
-	        	new JsonErrorMessage( "IO_EXCEPTION_RECEIVING", "IO Exception while receiving messages: " + e.getMessage(), null).printStderr();
-	        } catch (AssertionError e) {
-	            handleAssertionError(e);
-	        }
+            System.out.println("{\"type\":\"evtloop_start\"}");
+            double timeout = 120;
+            if (ns.getDouble("timeout") != null) {
+                timeout = ns.getDouble("timeout");
+            }
+            boolean returnOnTimeout = true;
+            if (timeout < 0) {
+                returnOnTimeout = false;
+                timeout = 3600;
+            }
+            boolean ignoreAttachments = false;
+            if( ns.getBoolean("ignore_attachments") != null) {
+                ignoreAttachments = ns.getBoolean("ignore_attachments");
+            }
+            try {
+                m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandlerJSON(m));
+            } catch (IOException e) {
+                //System.err.println("Error while receiving messages: " + e.getMessage());
+                //System.out.println("{\"type\": \"error\", \"error\": \"ERROR_RECEIVING\", \"message\": \"Error while receiving messages: " + e.getMessage() + "\" }");
+                new JsonErrorMessage( "IO_EXCEPTION_RECEIVING", "IO Exception while receiving messages: " + e.getMessage(), null).printStderr();
+            } catch (AssertionError e) {
+                handleAssertionError(e);
+            }
         }
 
         return 0;
