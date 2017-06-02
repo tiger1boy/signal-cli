@@ -79,6 +79,35 @@ public class Main {
     }
 
 
+	public static class JsonErrorMessage {
+		public String type;
+	    public String id;
+		public String error;		// Error name (fixed string)
+		public String message;		// Human readable error message
+		public String subject;		// Number or otherwise context relevant information about the error
+		JsonErrorMessage( String error, String message, String subject) {
+			this.type = "error";
+			this.error = error;
+			this.message = message;
+			this.subject = subject;
+		}
+
+	    JsonErrorMessage( String error, String message, String subject, String id) {
+			this.type = "error";
+			this.id = id;
+			this.error = error;
+			this.message = message;
+			this.subject = subject;                
+	    }
+
+	    public void printStderr() {
+			Gson gson;
+//	    	if(gson == null)
+	    		gson = new Gson();
+	        System.out.println( gson.toJson(this));
+	    }
+	}
+
     private static class JsonRequestHandler {
         private Manager m;
         private Signal ts;
@@ -87,70 +116,45 @@ public class Main {
 
         private class JsonRequest {
 			public String type;
+            public String id;
 			public String messageBody;
 			public String recipientNumber;
 			JsonRequest() {
 			}
         }
 
-        private class JsonErrorMessage {
-        	public String type;
-        	public String error;		// Error name (fixed string)
-        	public String message;		// Human readable error message
-        	public String subject;		// Number or otherwise context relevant information about the error
-        	JsonErrorMessage( String error, String message, String subject) {
-        		this.type = "error";
-        		this.error = error;
-        		this.message = message;
-        		this.subject = subject;
-        	}
-        }
-
-        void errorOutputJson( String error, String message, String subject) {
-        	JsonErrorMessage e = new JsonErrorMessage( error, message, subject);
-        	System.out.println( gson.toJson(e));
-        }
 
         // Send Signal message
-        int sendMessage( JsonRequest req) {
-            if (!this.m.isRegistered()) {
-                System.err.println("JsonRequestHandler: User is not registered.");
-                return 1;
-            }
+		int sendMessage( JsonRequest req) {
+			if (!this.m.isRegistered()) {
+				new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered", null, req.id).printStderr();
+				return 1;
+			}
 
             System.err.println("JsonRequestHandler: Send message: " + req.messageBody);
 
-            // if (ns.getBoolean("endsession")) {
-            //     if (ns.getList("recipient") == null) {
-            //         System.err.println("No recipients given");
-            //         System.err.println("Aborting sending.");
-            //         return 1;
-            //     }
-            //     try {
-            //         ts.sendEndSessionMessage(ns.<String>getList("recipient"));
-            //     } catch (IOException e) {
-            //         handleIOException(e);
-            //         return 3;
-            //     } catch (EncapsulatedExceptions e) {
-            //         handleEncapsulatedExceptions(e);
-            //         return 3;
-            //     } catch (AssertionError e) {
-            //         handleAssertionError(e);
-            //         return 1;
-            //     } catch (DBusExecutionException e) {
-            //         handleDBusExecutionException(e);
-            //         return 1;
-            //     }
-            // } else {
-            // if (messageText == null) {
-            //     try {
-            //         messageText = readAll(System.in);
-            //     } catch (IOException e) {
-            //         System.err.println("Failed to read message from stdin: " + e.getMessage());
-            //         System.err.println("Aborting sending.");
-            //         return 1;
-            //     }
-            // }
+			// if (ns.getBoolean("endsession")) {
+			//     if (ns.getList("recipient") == null) {
+			//         System.err.println("No recipients given");
+			//         System.err.println("Aborting sending.");
+			//         return 1;
+			//     }
+			//     try {
+			//         ts.sendEndSessionMessage(ns.<String>getList("recipient"));
+			//     } catch (IOException e) {
+			//         handleIOException(e);
+			//         return 3;
+			//     } catch (EncapsulatedExceptions e) {
+			//         handleEncapsulatedExceptions(e);
+			//         return 3;
+			//     } catch (AssertionError e) {
+			//         handleAssertionError(e);
+			//         return 1;
+			//     } catch (DBusExecutionException e) {
+			//         handleDBusExecutionException(e);
+			//         return 1;
+			//     }
+			// } else {
 
 			try {
 			    // List<String> attachments = ns.getList("attachment");
@@ -166,41 +170,42 @@ public class Main {
 			    List<String> attachments = new ArrayList<String>();
 			    ts.sendMessage( req.messageBody, attachments, req.recipientNumber);
 			} catch (IOException e) {
-				handleIOException(e);
+				//handleIOException(e);
+				new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req.id).printStderr();
 				return 3;
 			} catch (EncapsulatedExceptions e) {
-				handleEncapsulatedExceptions(e);
+				// handleEncapsulatedExceptions(e);
 				//errorOutputJson( "SEND_ERROR", "Failed to send message(EncapsulatedExceptions): " + e.toString());
 		        for (NetworkFailureException n : e.getNetworkExceptions()) {
 		            // System.err.println("Network failure for \"" + n.getE164number() + "\": " + n.getMessage());
-		            errorOutputJson( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number());
+		            new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req.id).printStderr();
 		        }
 		        for (UnregisteredUserException n : e.getUnregisteredUserExceptions()) {
 		            // System.err.println("Unregistered user \"" + n.getE164Number() + "\": " + n.getMessage());
-		            errorOutputJson( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number());
+		            new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
 		        }
 		        for (UntrustedIdentityException n : e.getUntrustedIdentityExceptions()) {
 		            // System.err.println("Untrusted Identity for \"" + n.getE164Number() + "\": " + n.getMessage());
-		            errorOutputJson( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number());
+		            new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
 		        }
 
 				return 3;
 			} catch (AssertionError e) {
-				handleAssertionError(e);
-				errorOutputJson( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber);
+				// handleAssertionError(e);
+				new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req.id).printStderr();
 				return 1;
 			} catch (GroupNotFoundException e) {
-				handleGroupNotFoundException(e);
-				errorOutputJson( "SEND_ERROR", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber);
+				// handleGroupNotFoundException(e);
+				new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req.id).printStderr();
 				return 1;
 			} catch (NotAGroupMemberException e) {
-				handleNotAGroupMemberException(e);
-				errorOutputJson( "SEND_ERROR", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber);
+				// handleNotAGroupMemberException(e);
+				new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req.id).printStderr();
 				return 1;
 			} catch (AttachmentInvalidException e) {
-			    System.err.println("Failed to add attachment: " + e.getMessage());
-				System.err.println("Aborting sending.");
-				errorOutputJson( "SEND_ERROR", "Failed to add attachment: " + e.toString(), req.recipientNumber);
+				// System.err.println("Failed to add attachment: " + e.getMessage());
+				// System.err.println("Aborting sending.");
+				new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req.id).printStderr();
 				return 1;
 			}
 			return 0;
@@ -216,10 +221,16 @@ public class Main {
 				System.err.println("ERROR: JsonRequestHandler: Failed to parse json: " + e.toString());
 				return;
 			}
-			if( req.type.equals("send")) {
-				sendMessage(req);
-			} else {
-				System.err.println("ERROR: Unknown JsonRequest type: '" + req.type + "'");
+			switch( req.type) {
+				case "send":
+					sendMessage(req);
+					break;
+				case "exit":
+					System.err.println("signal-cli: Exiting event loop on exit command");
+					System.exit(0);
+					break;
+				default:
+					System.err.println("ERROR: Unknown JsonRequest type '" + req.type + "'");
 			}
 		}
 
@@ -531,29 +542,33 @@ public class Main {
         Thread jsonStdinReaderThread = new Thread( reader);
         jsonStdinReaderThread.start();
 
-        double timeout = 30;
-        if (ns.getDouble("timeout") != null) {
-            timeout = ns.getDouble("timeout");
+        Boolean exitNow = false;
+
+        while( !exitNow) {
+        	System.out.println("{\"type\":\"evtloop_start\"}");
+	        double timeout = 120;
+	        if (ns.getDouble("timeout") != null) {
+	            timeout = ns.getDouble("timeout");
+	        }
+	        boolean returnOnTimeout = true;
+	        if (timeout < 0) {
+	            returnOnTimeout = false;
+	            timeout = 3600;
+	        }
+	        boolean ignoreAttachments = false;
+	        if( ns.getBoolean("ignore_attachments") != null) {
+	            ignoreAttachments = ns.getBoolean("ignore_attachments");
+	        }
+	        try {
+	            m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandlerJSON(m));
+	        } catch (IOException e) {
+	            //System.err.println("Error while receiving messages: " + e.getMessage());
+	            //System.out.println("{\"type\": \"error\", \"error\": \"ERROR_RECEIVING\", \"message\": \"Error while receiving messages: " + e.getMessage() + "\" }");
+	        	new JsonErrorMessage( "IO_EXCEPTION_RECEIVING", "IO Exception while receiving messages: " + e.getMessage(), null).printStderr();
+	        } catch (AssertionError e) {
+	            handleAssertionError(e);
+	        }
         }
-        boolean returnOnTimeout = true;
-        if (timeout < 0) {
-            returnOnTimeout = false;
-            timeout = 3600;
-        }
-        boolean ignoreAttachments = false;
-        if( ns.getBoolean("ignore_attachments") != null) {
-            ignoreAttachments = ns.getBoolean("ignore_attachments");
-        }
-        try {
-            m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandlerJSON(m));
-        } catch (IOException e) {
-            //System.err.println("Error while receiving messages: " + e.getMessage());
-            System.out.println("{\"type\": \"error\", \"error\": \"ERROR_RECEIVING\", \"message\": \"Error while receiving messages: " + e.getMessage() + "\" }");
-            return 3;
-        } catch (AssertionError e) {
-            handleAssertionError(e);
-            return 1;
-        }        
 
         return 0;
     }
