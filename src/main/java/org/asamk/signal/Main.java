@@ -78,6 +78,51 @@ public class Main {
         System.exit(res);
     }
 
+    public static class JsonMessageAttachmentInfo {
+        public String type;
+        public String context;
+        public long id;
+        public String relay;
+        public String filename;
+        public String contentType;
+        public long sizeBytes;
+        public String storedFilename;
+        JsonMessageAttachmentInfo() {
+        }
+    }
+
+    public static class JsonMessage {
+        public String type;
+        public String status;
+        public String id;
+        public String senderNumber;
+        public String senderContactName = null;
+        public int senderSourceDevice;
+        public String relayedBy = null;
+        public String timestamp;
+        public long timestampEpoch;
+        public String messageBody;
+        public String groupId;
+        public String groupName;
+        public Collection<String> groupMembers;
+        public Collection<JsonMessageAttachmentInfo> attachments;
+        public long groupMessageExpireTime;
+
+        JsonMessage() {
+        }
+
+        JsonMessage( String type, String id, String status) {
+            this.type = type;
+            this.id = id;
+            this.status = status;
+        }
+
+        void emit() {
+            Gson gson = new Gson();
+            System.out.println( gson.toJson(this));
+        }
+    }
+
 
     public static class JsonErrorMessage {
         public String type;
@@ -100,10 +145,9 @@ public class Main {
             this.subject = subject;                
         }
 
-        public void printStderr() {
+        public void emit() {
             Gson gson;
-//          if(gson == null)
-                gson = new Gson();
+            gson = new Gson();
             System.out.println( gson.toJson(this));
         }
     }
@@ -127,7 +171,7 @@ public class Main {
         // Send Signal message
         int sendMessage( JsonRequest req) {
             if (!this.m.isRegistered()) {
-                new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered", null, req.id).printStderr();
+                new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered", null, req.id).emit();
                 return 1;
             }
 
@@ -171,43 +215,44 @@ public class Main {
                 ts.sendMessage( req.messageBody, attachments, req.recipientNumber);
             } catch (IOException e) {
                 //handleIOException(e);
-                new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req.id).printStderr();
+                new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req.id).emit();
                 return 3;
             } catch (EncapsulatedExceptions e) {
                 // handleEncapsulatedExceptions(e);
                 //errorOutputJson( "SEND_ERROR", "Failed to send message(EncapsulatedExceptions): " + e.toString());
                 for (NetworkFailureException n : e.getNetworkExceptions()) {
                     // System.err.println("Network failure for \"" + n.getE164number() + "\": " + n.getMessage());
-                    new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req.id).printStderr();
+                    new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req.id).emit();
                 }
                 for (UnregisteredUserException n : e.getUnregisteredUserExceptions()) {
                     // System.err.println("Unregistered user \"" + n.getE164Number() + "\": " + n.getMessage());
-                    new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
+                    new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).emit();
                 }
                 for (UntrustedIdentityException n : e.getUntrustedIdentityExceptions()) {
                     // System.err.println("Untrusted Identity for \"" + n.getE164Number() + "\": " + n.getMessage());
-                    new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).printStderr();
+                    new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).emit();
                 }
 
                 return 3;
             } catch (AssertionError e) {
                 // handleAssertionError(e);
-                new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req.id).printStderr();
+                new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req.id).emit();
                 return 1;
             } catch (GroupNotFoundException e) {
                 // handleGroupNotFoundException(e);
-                new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req.id).printStderr();
+                new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req.id).emit();
                 return 1;
             } catch (NotAGroupMemberException e) {
                 // handleNotAGroupMemberException(e);
-                new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req.id).printStderr();
+                new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req.id).emit();
                 return 1;
             } catch (AttachmentInvalidException e) {
                 // System.err.println("Failed to add attachment: " + e.getMessage());
                 // System.err.println("Aborting sending.");
-                new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req.id).printStderr();
+                new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req.id).emit();
                 return 1;
             }
+            new JsonMessage("result", req.id, "ok").emit();
             return 0;
         }
 
@@ -274,36 +319,6 @@ public class Main {
             this.gson = new Gson();
         }
 
-        public class JsonMessageAttachmentInfo {
-            public String type;
-            public String context;
-                public long id;
-                public String relay;
-                public String filename;
-                public String contentType;
-                public long sizeBytes;
-                public String storedFilename;
-            JsonMessageAttachmentInfo() {
-            }
-        }
-
-        public class JsonMessage {
-            public String type;
-            public String senderNumber;
-            public String senderContactName = null;
-            public int senderSourceDevice;
-            public String relayedBy = null;
-            public String timestamp;
-            public long timestampEpoch;
-            public String messageBody;
-            public String groupId;
-            public String groupName;
-            public Collection<String> groupMembers;
-            public Collection<JsonMessageAttachmentInfo> attachments;
-            public long groupMessageExpireTime;
-            JsonMessage() {
-            }
-        }
 
         @Override
         public void handleMessage(SignalServiceEnvelope envelope, SignalServiceContent content, Throwable exception) {
@@ -562,9 +577,7 @@ public class Main {
             try {
                 m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandlerJSON(m));
             } catch (IOException e) {
-                //System.err.println("Error while receiving messages: " + e.getMessage());
-                //System.out.println("{\"type\": \"error\", \"error\": \"ERROR_RECEIVING\", \"message\": \"Error while receiving messages: " + e.getMessage() + "\" }");
-                new JsonErrorMessage( "IO_EXCEPTION_RECEIVING", "IO Exception while receiving messages: " + e.getMessage(), null).printStderr();
+                new JsonErrorMessage( "IO_EXCEPTION_RECEIVING", "IO Exception while receiving messages: " + e.getMessage(), null).emit();
             } catch (AssertionError e) {
                 handleAssertionError(e);
             }
