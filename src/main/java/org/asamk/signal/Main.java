@@ -123,13 +123,23 @@ public class Main {
         }
     }
 
+    private static class JsonRequest {
+        public String type;				// Request type ("send")
+        public String id;				// Transaction ID for building async flow with potential client library (optional)
+        public String messageBody;		// (type:send) Message body
+        public String recipientNumber;	// (type:send) Message recipient (telephone number typically)
+        public String recipientGroupId;	// (type:send) Group ID to send to (can not be combined with recipientNumber, it's either)
+        JsonRequest() {
+        }
+    }
 
     public static class JsonErrorMessage {
         public String type;
-        public String id;
+        public String id;			// Transaction ID, copied from request
         public String error;        // Error name (fixed string)
         public String message;      // Human readable error message
         public String subject;      // Number or otherwise context relevant information about the error
+        
         JsonErrorMessage( String error, String message, String subject) {
             this.type = "error";
             this.error = error;
@@ -137,9 +147,10 @@ public class Main {
             this.subject = subject;
         }
 
-        JsonErrorMessage( String error, String message, String subject, String id) {
+        JsonErrorMessage( String error, String message, String subject, JsonRequest req) {
             this.type = "error";
-            this.id = id;
+            if( req.id != null)
+            	this.id = req.id;
             this.error = error;
             this.message = message;
             this.subject = subject;                
@@ -152,26 +163,21 @@ public class Main {
         }
     }
 
+
+
     private static class JsonRequestHandler {
         private Manager m;
         private Signal ts;
         private Gson gson;
 
 
-        private class JsonRequest {
-            public String type;
-            public String id;
-            public String messageBody;
-            public String recipientNumber;
-            JsonRequest() {
-            }
-        }
-
-
-        // Send Signal message
+        //
+        // type:send 
+        // Send Signal message to recipient number or groupId
+        //
         int sendMessage( JsonRequest req) {
             if (!this.m.isRegistered()) {
-                new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered", null, req.id).emit();
+                new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered", null, req).emit();
                 return 1;
             }
 
@@ -212,44 +218,50 @@ public class Main {
                 //     ts.sendMessage(messageText, attachments, ns.<String>getList("recipient"));
                 // }
                 List<String> attachments = new ArrayList<String>();
-                ts.sendMessage( req.messageBody, attachments, req.recipientNumber);
+                if( req.recipientGroupId != null && !req.recipientGroupId.equals("")) {
+
+                    byte[] groupId = decodeGroupId(req.recipientGroupId);
+                	ts.sendGroupMessage( req.messageBody, attachments, groupId);
+                } else {
+	                ts.sendMessage( req.messageBody, attachments, req.recipientNumber);
+                }
             } catch (IOException e) {
                 //handleIOException(e);
-                new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req.id).emit();
+                new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req).emit();
                 return 3;
             } catch (EncapsulatedExceptions e) {
                 // handleEncapsulatedExceptions(e);
                 //errorOutputJson( "SEND_ERROR", "Failed to send message(EncapsulatedExceptions): " + e.toString());
                 for (NetworkFailureException n : e.getNetworkExceptions()) {
                     // System.err.println("Network failure for \"" + n.getE164number() + "\": " + n.getMessage());
-                    new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req.id).emit();
+                    new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req).emit();
                 }
                 for (UnregisteredUserException n : e.getUnregisteredUserExceptions()) {
                     // System.err.println("Unregistered user \"" + n.getE164Number() + "\": " + n.getMessage());
-                    new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).emit();
+                    new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req).emit();
                 }
                 for (UntrustedIdentityException n : e.getUntrustedIdentityExceptions()) {
                     // System.err.println("Untrusted Identity for \"" + n.getE164Number() + "\": " + n.getMessage());
-                    new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req.id).emit();
+                    new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req).emit();
                 }
 
                 return 3;
             } catch (AssertionError e) {
                 // handleAssertionError(e);
-                new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req.id).emit();
+                new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             } catch (GroupNotFoundException e) {
                 // handleGroupNotFoundException(e);
-                new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req.id).emit();
+                new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             } catch (NotAGroupMemberException e) {
                 // handleNotAGroupMemberException(e);
-                new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req.id).emit();
+                new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             } catch (AttachmentInvalidException e) {
                 // System.err.println("Failed to add attachment: " + e.getMessage());
                 // System.err.println("Aborting sending.");
-                new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req.id).emit();
+                new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             }
             new JsonMessage("result", req.id, "ok").emit();
@@ -265,6 +277,9 @@ public class Main {
             } catch ( com.google.gson.JsonParseException e) {
                 System.err.println("ERROR: JsonRequestHandler: Failed to parse json: " + e.toString());
                 return;
+            } catch( Exception e) {
+            	System.err.println("ERROR: JsonRequestHandler: Failed to parse json (generic exception): " + e.toString());
+            	return;
             }
             switch( req.type) {
                 case "send":
