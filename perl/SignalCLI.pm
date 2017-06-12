@@ -67,9 +67,16 @@ sub new {
 		chomp($line);
 		print STDERR "DEBUG(JSON-IN): ".$line."\n" if( $self->{'debug'});
 		if( $line ne "") {
-			my $json = from_json($line);
-			if( $json) { 
-				print STDERR "DEBUG(JSON-Dump): ".Dumper($json)."\n" if( $self->{'debug'});
+			my $msg = decode_json($line);
+			if( $msg) { 
+				print STDERR "DEBUG(JSON-Dump): ".Dumper($msg)."\n" if( $self->{'debug'});
+				if( exists $self->{'cblist'}->{$msg->{'type'}}) {
+					## call on callback handler for this message type
+					print STDERR "DEBUG: Calling callback for message type '".$msg->{'type'}."'\n" if( $self->{'debug'});
+					&{$self->{'cblist'}->{$msg->{'type'}}}($msg);
+				} else {
+					print STDERR "DEBUG: No callback defined for message type '".$msg->{'type'}."'\n" if( $self->{'debug'});					
+				}
 			}
 		} else {
 			print STDERR "DEBUG(JSON-IN): Empty string received\n";
@@ -106,6 +113,14 @@ sub submit_request {
 	my $json = to_json($request);
 	print STDERR "DEBUG(JSON-OUT): ".$json."\n" if( $self->{'debug'});
 	print {$self->{'signal_cli_stdin'}} $json."\n";
+}
+
+sub on {
+	my( $self, $event_type, $cb) = @_;
+	if( !grep( $event_type, qw/error result message receipt groupMessage groupInfo/) ) {
+		die "SignalCLI.pm::on ERROR: Unknown event type '".$event_type."', exiting\n";
+	}
+	$self->{'cblist'}->{$event_type} = $cb;
 }
 
 sub run {
