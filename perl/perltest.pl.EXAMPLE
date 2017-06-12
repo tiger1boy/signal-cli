@@ -1,0 +1,9 @@
+#!/usr/bin/perl
+
+use strict;
+use lib '.';
+use SignalCLI;
+
+my $s = new SignalCLI( 'telephone_number' => '+1234567890', 'debug' => 1 );
+$s->run();
+
