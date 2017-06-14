@@ -78,6 +78,7 @@ public class Main {
         System.exit(res);
     }
 
+    // Value class for attachment information (for serializing to json)
     public static class JsonMessageAttachmentInfo {
         public String type;
         public String context;
@@ -91,6 +92,7 @@ public class Main {
         }
     }
 
+    // "Value class" for emitting json messages to stdout
     public static class JsonMessage {
         public String type;
         public String status;
@@ -123,6 +125,7 @@ public class Main {
         }
     }
 
+    // Value class for de-serialization of incoming json requests on stdin
     private static class JsonRequest {
         public String type;				// Request type ("send")
         public String id;				// Transaction ID for building async flow with potential client library (optional)
@@ -133,12 +136,13 @@ public class Main {
         }
     }
 
+    // "Value class" for emitting json error messages to stdout
     public static class JsonErrorMessage {
         public String type;
         public String id;			// Transaction ID, copied from request
         public String error;        // Error name (fixed string)
         public String message;      // Human readable error message
-        public String subject;      // Number or otherwise context relevant information about the error
+        public String subject;      // Telephone number, groupId or otherwise context relevant information about the error
 
         JsonErrorMessage( String error, String message, String subject) {
             this.type = "error";
@@ -164,12 +168,13 @@ public class Main {
     }
 
 
-
+    //
+    //	Handles incoming json requests (called from JsonStdinReader in stdin reader thread)
+    //
     private static class JsonRequestHandler {
         private Manager m;
         private Signal ts;
         private Gson gson;
-
 
         //
         // type:send 
@@ -181,6 +186,7 @@ public class Main {
                 return 1;
             }
 
+            // TODO: figure out what "endsession" means and if it is something we need to implement in jsonevtloop(?)
             // if (ns.getBoolean("endsession")) {
             //     if (ns.getList("recipient") == null) {
             //         System.err.println("No recipients given");
@@ -277,11 +283,11 @@ public class Main {
                 req = this.gson.fromJson( line, JsonRequest.class);
             } catch ( com.google.gson.JsonParseException e) {
                 System.err.println("ERROR: JsonRequestHandler: Failed to parse json: " + e.toString());
-                System.err.println("Original line: " + line);
+                System.err.println("Original request text: " + line);
                 return;
             } catch( Exception e) {
             	System.err.println("ERROR: JsonRequestHandler: Failed to parse json (generic exception): " + e.toString());
-                System.err.println("Original line: " + line);
+                System.err.println("Original request text: " + line);
             	return;
             }
             switch( req.type) {
@@ -290,6 +296,7 @@ public class Main {
                     break;
                 case "exit":
                     System.err.println("signal-cli: Exiting event loop on exit request");
+                    new JsonMessage("jsonevtloop_exit", null, null).emit();
                     System.exit(0);
                     break;
                 default:
@@ -568,11 +575,19 @@ public class Main {
     }
 
 
-
+    //
+    //	Start json event loop mode
+    //
+    //  General idea is to provide lightweight API for scripting languages
+    //
+    // 	Main threads receives starts signal receiveMessages and receives all incoming messages and emits json blobs to stdout (line buffered (one line - one json blob))
+    //	New thread starts and reads commands from stdin formatted as json requests (also line buffered)
+    // 	Errors goes to stderr
+    //
     private static int jsonEvtLoop( Namespace ns, Manager m, Signal ts) {
         if (!m.isRegistered()) {
-            //System.err.println("User is not registered.");
-            System.out.println("{\"type\": \"error\", \"error\": \"USER_NOT_REGISTERED\", \"message\": \"User not registered\" }");
+            //System.out.println("{\"type\": \"error\", \"error\": \"USER_NOT_REGISTERED\", \"message\": \"User not registered\" }");
+            new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered, please use signal-cli register/verify from commandline", null).emit();
             return 1;
         }
 
@@ -584,9 +599,10 @@ public class Main {
 
         Boolean exitNow = false;
 
+        new JsonMessage( "jsonevtloop_start", null, null).emit();
         while( !exitNow) {
-            System.out.println("{\"type\":\"evtloop_start\"}");
-            double timeout = 120;
+        	new JsonMessage( "jsonevtloop_alive", null, null).emit();
+            double timeout = 3600;
             if (ns.getDouble("timeout") != null) {
                 timeout = ns.getDouble("timeout");
             }

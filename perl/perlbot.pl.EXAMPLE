@@ -1,0 +1,48 @@
+#!/usr/bin/perl
+
+use strict;
+use lib '.';
+use SignalCLI;
+use utf8;
+use locale;
+
+## NOTE: telephone_number is the "bots" telephone number (its signal identity)
+## Identity needs to have been registered first using signal-cli commandline
+## see https://github.com/AsamK/signal-cli#usage
+##
+my $s = new SignalCLI( 'telephone_number' => '+1234', 'debug' => 1 );
+
+## send message 
+## (wait until signal-cli has started and emits the evtloop_start event)
+$s->on('jsonevtloop_start', sub {
+	## send message 
+	$s->send_message( "+2345", undef, undef, "Bot started!", sub {
+		## it went ok, now exit (or not)
+		#$s->exit();
+	});
+});
+
+## handle incoming direct messages
+$s->on('message', sub {
+	my($r) = @_;
+	if( lc($r->{'messageBody'}) eq "die") {
+		$s->reply( $r, undef, "Ok, shutting down", sub {
+			$s->exit();
+			});
+	} else {
+		$s->reply( $r, undef, "The heck you say!");
+	}
+});
+
+## handle incoming group messages
+$s->on('groupMessage', sub {
+	my($r) = @_;
+	## only reply on messages sent in one particular group
+	if( $r->{'groupId'} eq "zmU1L9a2sFTv9kCrk+FS5g==") {		## test group 2
+		$s->reply( $r, undef, "Who is this guy (".$r->{'senderNumber'}."), anyway!?");
+	}
+});
+
+## start event loop and run forever (or until exit)
+$s->run();
+
