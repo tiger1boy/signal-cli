@@ -132,6 +132,7 @@ public class Main {
         public String messageBody;		// (type:send) Message body
         public String recipientNumber;	// (type:send) Message recipient (telephone number typically)
         public String recipientGroupId;	// (type:send) Group ID to send to (can not be combined with recipientNumber, it's either)
+        public List<String> attachmentFilenames;
         JsonRequest() {
         }
     }
@@ -215,15 +216,15 @@ public class Main {
                 // if (attachments == null) {
                 //     attachments = new ArrayList<>();
                 // }
-                // if (ns.getString("group") != null) {
-                //     byte[] groupId = decodeGroupId(ns.getString("group"));
-                //     ts.sendGroupMessage(messageText, attachments, groupId);
-                // } else {
-                //     ts.sendMessage(messageText, attachments, ns.<String>getList("recipient"));
-                // }
 
             	//TODO: Implement sending of attachments, now just empty place holder
                 List<String> attachments = new ArrayList<String>();
+                if( req.attachmentFilenames != null) {
+                	// for( String f : req.attachmentFilenames) {
+                	// 	System.err.println("ATTACHMENT: " + f);
+                	// }
+                    attachments = req.attachmentFilenames;
+                }
 
                 if( req.recipientGroupId != null && !req.recipientGroupId.equals("")) {
 

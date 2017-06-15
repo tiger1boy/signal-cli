@@ -167,8 +167,8 @@ sub handle_incoming_message {
 #      'type' => 'message',
 #      'senderSourceDevice' => 1,
 #      'timestamp' => '2017-06-14T08:14:14.448Z',
-#      'senderNumber' => '+46703739258',
-#      'messageBody' => 'Kotte'
+#      'senderNumber' => '+1234',
+#      'messageBody' => 'Testing'
 #    };
 
 # group message
@@ -179,7 +179,7 @@ sub handle_incoming_message {
 #      'senderSourceDevice' => 1,
 #      'groupName' => 'testgruppen testabbet w',
 #      'messageBody' => 'Gunnar ',
-#      'senderNumber' => '+46703739258',
+#      'senderNumber' => '+1234',
 #      'groupMessageExpireTime' => '1800',
 #      'groupId' => 'hyo+GHM6IlVAxab348n6kQ=='
 #    };
@@ -215,7 +215,7 @@ sub handle_receipt {
 	#          'type' => 'receipt',
 	#          'timestampEpoch' => '1497426702837',
 	#          'senderSourceDevice' => 1,
-	#          'senderNumber' => '+46703739258'
+	#          'senderNumber' => '+1234'
 	# };
 	print STDERR "SignalCLI::handle_receipt senderNumber='".$request->{'senderNumber'}."', timestamp='".$request->{'timestamp'}."'\n" if( $self->{'debug'});
 
@@ -252,6 +252,9 @@ sub send_message {
 		} else {
 			print STDERR $msg."\n";
 		}
+	}
+	if( defined $attachments_aref && ref($attachments_aref) eq "ARRAY") {
+		$r->{'attachmentFilenames'} = $attachments_aref;
 	}
 	if( $on_success) {
 		$self->{'trans_cb'}->{$trans_id}->{'success'} = $on_success;
