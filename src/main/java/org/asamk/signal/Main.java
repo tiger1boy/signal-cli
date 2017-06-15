@@ -212,17 +212,8 @@ public class Main {
             // } else {
 
             try {
-                // List<String> attachments = ns.getList("attachment");
-                // if (attachments == null) {
-                //     attachments = new ArrayList<>();
-                // }
-
-            	//TODO: Implement sending of attachments, now just empty place holder
                 List<String> attachments = new ArrayList<String>();
                 if( req.attachmentFilenames != null) {
-                	// for( String f : req.attachmentFilenames) {
-                	// 	System.err.println("ATTACHMENT: " + f);
-                	// }
                     attachments = req.attachmentFilenames;
                 }
 
@@ -238,18 +229,13 @@ public class Main {
                 new JsonErrorMessage( "SEND_ERROR_IO_EXCEPTION", "Failed to send message: IO Exception: " + e.getMessage(), null, req).emit();
                 return 3;
             } catch (EncapsulatedExceptions e) {
-                // handleEncapsulatedExceptions(e);
-                //errorOutputJson( "SEND_ERROR", "Failed to send message(EncapsulatedExceptions): " + e.toString());
                 for (NetworkFailureException n : e.getNetworkExceptions()) {
-                    // System.err.println("Network failure for \"" + n.getE164number() + "\": " + n.getMessage());
                     new JsonErrorMessage( "SEND_ERROR_NETWORK_FAILURE", "Failed to send message: Network failure for '" + n.getE164number() + "': " + n.getMessage(), n.getE164number(), req).emit();
                 }
                 for (UnregisteredUserException n : e.getUnregisteredUserExceptions()) {
-                    // System.err.println("Unregistered user \"" + n.getE164Number() + "\": " + n.getMessage());
                     new JsonErrorMessage( "SEND_ERROR_UNREGISTERED_USER", "Failed to send message: Unregistered user '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req).emit();
                 }
                 for (UntrustedIdentityException n : e.getUntrustedIdentityExceptions()) {
-                    // System.err.println("Untrusted Identity for \"" + n.getE164Number() + "\": " + n.getMessage());
                     new JsonErrorMessage( "SEND_ERROR_UNTRUSTED_IDENTITY", "Failed to send message: Untrusted identity for '" + n.getE164Number() + "': " + n.getMessage(), n.getE164Number(), req).emit();
                 }
 
@@ -259,16 +245,12 @@ public class Main {
                 new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             } catch (GroupNotFoundException e) {
-                // handleGroupNotFoundException(e);
                 new JsonErrorMessage( "SEND_ERROR_GROUP_NOT_FOUND", "Failed to send message(GroupNotFoundException): " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             } catch (NotAGroupMemberException e) {
-                // handleNotAGroupMemberException(e);
                 new JsonErrorMessage( "SEND_ERROR_NOT_A_GROUP_MEMBER", "Failed to send message(NotAGroupMemberException): " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             } catch (AttachmentInvalidException e) {
-                // System.err.println("Failed to add attachment: " + e.getMessage());
-                // System.err.println("Aborting sending.");
                 new JsonErrorMessage( "SEND_ERROR_FAILED_TO_ADD_ATTACHMENT", "Failed to add attachment: " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             }
@@ -455,9 +437,7 @@ public class Main {
                 System.err.println("Unknown message received.");
                 j.type = "unknown";
             }
-            //System.err.println();
 
-            //System.out.println( this.gson.toJson(j));
             j.emit();
         }
 
@@ -465,7 +445,6 @@ public class Main {
             //System.err.println("Message timestamp: " + formatTimestamp(message.getTimestamp()));
 
             if (message.getBody().isPresent()) {
-                //System.out.println("Body: " + message.getBody().get());
                 j.messageBody = message.getBody().get();
             }
             if (message.getGroupInfo().isPresent()) {
@@ -475,19 +454,14 @@ public class Main {
             		j.type = "groupMessage";
             	}
                 SignalServiceGroup groupInfo = message.getGroupInfo().get();
-                // System.out.println("Group info:");
-                // System.out.println("  Id: " + Base64.encodeBytes(groupInfo.getGroupId()));
                 j.groupId = Base64.encodeBytes(groupInfo.getGroupId());
                 if (groupInfo.getType() == SignalServiceGroup.Type.UPDATE && groupInfo.getName().isPresent()) {
-                    // System.out.println("  Name: " + groupInfo.getName().get());
                     j.groupName = groupInfo.getName().get();
                 } else {
                     GroupInfo group = m.getGroup(groupInfo.getGroupId());
                     if (group != null) {
-                        // System.out.println("  Name: " + group.name);
                         j.groupName = group.name;
                     } else {
-                        // System.out.println("  Name: <Unknown group>");
                         j.groupName = "Unknown Group";
                     }
                 }
@@ -495,13 +469,10 @@ public class Main {
                 if (groupInfo.getMembers().isPresent()) {
                     j.groupMembers = new ArrayList<String>();
                     for (String member : groupInfo.getMembers().get()) {
-                        // System.out.println("  Member: " + member);
                         j.groupMembers.add(member);
                     }
                 }
                 if (groupInfo.getAvatar().isPresent()) {
-                    // System.out.println("  Avatar:");
-                    // printAttachment(groupInfo.getAvatar().get());
                     populateAttachmentList( j, groupInfo.getAvatar().get(), "avatar");
                 }
             }
@@ -559,20 +530,20 @@ public class Main {
             j.attachments.add(i);
         }
 
-        private void printAttachment(SignalServiceAttachment attachment) {
-            System.out.println("- " + attachment.getContentType() + " (" + (attachment.isPointer() ? "Pointer" : "") + (attachment.isStream() ? "Stream" : "") + ")");
-            if (attachment.isPointer()) {
-                final SignalServiceAttachmentPointer pointer = attachment.asPointer();
-                System.out.println("  Id: " + pointer.getId() + " Key length: " + pointer.getKey().length + (pointer.getRelay().isPresent() ? " Relay: " + pointer.getRelay().get() : ""));
-                System.out.println("  Filename: " + (pointer.getFileName().isPresent() ? pointer.getFileName().get() : "-"));
-                System.out.println("  Size: " + (pointer.getSize().isPresent() ? pointer.getSize().get() + " bytes" : "<unavailable>") + (pointer.getPreview().isPresent() ? " (Preview is available: " + pointer.getPreview().get().length + " bytes)" : ""));
-                System.out.println("  Voice note: " + (pointer.getVoiceNote() ? "yes" : "no"));
-                File file = m.getAttachmentFile(pointer.getId());
-                if (file.exists()) {
-                    System.out.println("  Stored plaintext in: " + file);
-                }
-            }
-        }
+        // private void printAttachment(SignalServiceAttachment attachment) {
+        //     System.out.println("- " + attachment.getContentType() + " (" + (attachment.isPointer() ? "Pointer" : "") + (attachment.isStream() ? "Stream" : "") + ")");
+        //     if (attachment.isPointer()) {
+        //         final SignalServiceAttachmentPointer pointer = attachment.asPointer();
+        //         System.out.println("  Id: " + pointer.getId() + " Key length: " + pointer.getKey().length + (pointer.getRelay().isPresent() ? " Relay: " + pointer.getRelay().get() : ""));
+        //         System.out.println("  Filename: " + (pointer.getFileName().isPresent() ? pointer.getFileName().get() : "-"));
+        //         System.out.println("  Size: " + (pointer.getSize().isPresent() ? pointer.getSize().get() + " bytes" : "<unavailable>") + (pointer.getPreview().isPresent() ? " (Preview is available: " + pointer.getPreview().get().length + " bytes)" : ""));
+        //         System.out.println("  Voice note: " + (pointer.getVoiceNote() ? "yes" : "no"));
+        //         File file = m.getAttachmentFile(pointer.getId());
+        //         if (file.exists()) {
+        //             System.out.println("  Stored plaintext in: " + file);
+        //         }
+        //     }
+        // }
     }
 
 
