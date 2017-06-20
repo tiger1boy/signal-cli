@@ -12,7 +12,7 @@ class JsonSyncMessage {
 
     JsonSyncMessage(SignalServiceSyncMessage syncMessage) {
         if (syncMessage.getSent().isPresent()) {
-            this.sentMessage = new JsonDataMessage(syncMessage.getSent().get().getMessage());
+            this.sentMessage = new JsonDataMessage(syncMessage.getSent().get().getMessage(), null);
         }
         if (syncMessage.getBlockedList().isPresent()) {
             this.blockedNumbers = syncMessage.getBlockedList().get().getNumbers();

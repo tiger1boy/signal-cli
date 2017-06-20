@@ -3,20 +3,18 @@
 use strict;
 use lib '.';
 use SignalCLI;
-use utf8;
-use locale;
 
 ## NOTE: telephone_number is the "bots" telephone number (its signal identity)
 ## Identity needs to have been registered first using signal-cli commandline
 ## see https://github.com/AsamK/signal-cli#usage
 ##
-my $s = new SignalCLI( 'telephone_number' => '+1234', 'debug' => 1 );
+my $s = new SignalCLI( 'telephone_number' => '+2345', 'debug' => 1 );
 
 ## send message 
 ## (wait until signal-cli has started and emits the evtloop_start event)
 $s->on('jsonevtloop_start', sub {
 	## send message 
-	$s->send_message( "+2345", undef, undef, "Bot started!", sub {
+	$s->send_message( "+1234", undef, undef, "Bot started!", sub {
 		## it went ok, now exit (or not)
 		#$s->exit();
 	});
@@ -25,10 +23,12 @@ $s->on('jsonevtloop_start', sub {
 ## handle incoming direct messages
 $s->on('message', sub {
 	my($r) = @_;
-	if( lc($r->{'messageBody'}) eq "die") {
+	if( lc($r->{'envelope'}->{'dataMessage'}->{'message'}) eq "die") {
 		$s->reply( $r, undef, "Ok, shutting down", sub {
 			$s->exit();
 			});
+	} elsif( $r->{'envelope'}->{'dataMessage'}->{'message'} =~ m/^repeat (.*)/i) {
+ 		$s->reply( $r, undef, "Stop it: ".$1);
 	} else {
 		$s->reply( $r, undef, "The heck you say!");
 	}
@@ -38,8 +38,10 @@ $s->on('message', sub {
 $s->on('groupMessage', sub {
 	my($r) = @_;
 	## only reply on messages sent in one particular group
-	if( $r->{'groupId'} eq "zmU1L9a2sFTv9kCrk+FS5g==") {		## test group 2
-		$s->reply( $r, undef, "Who is this guy (".$r->{'senderNumber'}."), anyway!?");
+	if( $r->{'envelope'}->{'dataMessage'}->{'groupInfo'}->{'groupId'} eq "zmU1L9a2sFTv9kCrk+FS5g==") {		## test group 2
+		$s->reply( $r, undef, "Who is this guy (".$r->{'envelope'}->{'source'}."), anyway!?");
+	} else {
+		$s->reply( $r, undef, "This group I don't know about...");
 	}
 });
 
