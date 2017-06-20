@@ -448,7 +448,7 @@ public class Main {
                 j.messageBody = message.getBody().get();
             }
             if (message.getGroupInfo().isPresent()) {
-            	if( message.getBody().get().equals("")) {
+            	if( message.getBody().get().equals("") && !message.getAttachments().isPresent() ) {
 	                j.type = "groupInfo";
             	} else {
             		j.type = "groupMessage";
