@@ -8,13 +8,17 @@ use SignalCLI;
 ## Identity needs to have been registered first using signal-cli commandline
 ## see https://github.com/AsamK/signal-cli#usage
 ##
-my $s = new SignalCLI( 'telephone_number' => '+2345', 'debug' => 1 );
+my $s = new SignalCLI( 
+	'telephone_number' => '+1234', 
+	'debug' => 1, 
+	'debug_io' => 0 
+);
 
 ## send message 
 ## (wait until signal-cli has started and emits the evtloop_start event)
 $s->on('jsonevtloop_start', sub {
 	## send message 
-	$s->send_message( "+1234", undef, undef, "Bot started!", sub {
+	$s->send_message( "+2345", undef, undef, "Bot started!", sub {
 		## it went ok, now exit (or not)
 		#$s->exit();
 	});

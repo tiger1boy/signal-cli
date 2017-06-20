@@ -21,7 +21,6 @@ import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.core.*;
-//import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -50,8 +49,6 @@ import org.whispersystems.signalservice.api.push.exceptions.NetworkFailureExcept
 import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserException;
 import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
 import org.whispersystems.signalservice.internal.util.Base64;
-
-// import com.google.gson.Gson;
 
 import java.io.File;
 import java.io.IOException;
@@ -99,7 +96,7 @@ public class Main {
         private ObjectMapper mpr;
 
         //
-        // type:send 
+        // request-type:send 
         // Send Signal message to recipient number or groupId
         //
         int sendMessage( JsonRequest req) {
@@ -162,7 +159,6 @@ public class Main {
 
                 return 3;
             } catch (AssertionError e) {
-                // handleAssertionError(e);
                 new JsonErrorMessage( "SEND_ERROR", "Failed to send message(AssertionError): " + e.toString(), req.recipientNumber, req).emit();
                 return 1;
             } catch (GroupNotFoundException e) {
@@ -219,7 +215,9 @@ public class Main {
         }
     }
 
-    // Thread to handle reading STDIN line-by-line and passing to JsonRequestHandler object 
+    //
+    // Thread to handle reading STDIN line-by-line and passing to JsonRequestHandler
+    //
     private static class JsonStdinReader implements Runnable {
         JsonRequestHandler jsonRequestHandler = null;
 
@@ -242,248 +240,18 @@ public class Main {
         }
     }
 
-    // Handles incoming Signal messages and spits out JSON on STDOUT
-    // private static class ReceiveMessageHandlerJSON implements Manager.ReceiveMessageHandler {
-    //     final Manager m;
-    //     final Gson gson;
-
-    //     public ReceiveMessageHandlerJSON(Manager m) {
-    //         this.m = m;
-    //         this.gson = new Gson();
-    //     }
-
-
-    //     @Override
-    //     public void handleMessage(SignalServiceEnvelope envelope, SignalServiceContent content, Throwable exception) {
-    //         JsonMessage j = new JsonMessage();
-
-    //         SignalServiceAddress source = envelope.getSourceAddress();
-    //         ContactInfo sourceContact = m.getContact(source.getNumber());
-    //         // System.out.println(String.format("Envelope from: %s (device: %d)", (sourceContact == null ? "" : "“" + sourceContact.name + "” ") + source.getNumber(), envelope.getSourceDevice()));
-    //         j.type = "message";
-    //         j.senderNumber = source.getNumber();
-    //         j.senderContactName = sourceContact == null ? null : sourceContact.name;
-    //         j.senderSourceDevice = envelope.getSourceDevice();
-    //         if (source.getRelay().isPresent()) {
-    //             // System.out.println("Relayed by: " + source.getRelay().get());
-    //             j.relayedBy = source.getRelay().get();
-    //         }
-    //         // System.out.println("Timestamp: " + formatTimestamp(envelope.getTimestamp()));
-    //         j.timestampEpoch = envelope.getTimestamp();
-    //         j.timestamp = formatTimestampISO(envelope.getTimestamp());
-
-    //         if (envelope.isReceipt()) {
-    //             // System.out.println("Got receipt.");
-    //             j.type = "receipt";
-    //         } else if (envelope.isSignalMessage() | envelope.isPreKeySignalMessage()) {
-    //             if (exception != null) {
-    //                 if (exception instanceof org.whispersystems.libsignal.UntrustedIdentityException) {
-    //                     org.whispersystems.libsignal.UntrustedIdentityException e = (org.whispersystems.libsignal.UntrustedIdentityException) exception;
-    //                     // System.out.println("The user’s key is untrusted, either the user has reinstalled Signal or a third party sent this message.");
-    //                     // System.out.println("Use 'signal-cli -u " + m.getUsername() + " listIdentities -n " + e.getName() + "', verify the key and run 'signal-cli -u " + m.getUsername() + " trust -v \"FINGER_PRINT\" " + e.getName() + "' to mark it as trusted");
-    //                     // System.out.println("If you don't care about security, use 'signal-cli -u " + m.getUsername() + " trust -a " + e.getName() + "' to trust it without verification");
-    //                     new JsonErrorMessage( "SENDER_NOT_TRUSTED", "The sender's key is untrusted, either the user has reinstalled Signal or a third party sent this message.", m.getUsername()).emit();
-    //                 } else {
-    //                     System.err.println("Exception: " + exception.getMessage() + " (" + exception.getClass().getSimpleName() + ")");
-    //                 }
-    //             }
-    //             if (content == null) {
-    //                 //System.err.println("Failed to decrypt message.");
-    //                 new JsonErrorMessage("FAILED_TO_DECRYPT", "Failed to decrypt message", null).emit();
-    //             } else {
-    //                 if (content.getDataMessage().isPresent()) {
-    //                     SignalServiceDataMessage message = content.getDataMessage().get();
-    //                     handleSignalServiceDataMessage(message, j);
-    //                 }
-    //                 if (content.getSyncMessage().isPresent()) {
-    //                     System.err.println("Received a sync message");
-    //                     SignalServiceSyncMessage syncMessage = content.getSyncMessage().get();
-
-    //                     if (syncMessage.getContacts().isPresent()) {
-    //                         final ContactsMessage contactsMessage = syncMessage.getContacts().get();
-    //                         if (contactsMessage.isComplete()) {
-    //                             System.err.println("Received complete sync contacts");
-    //                         } else {
-    //                             System.err.println("Received sync contacts");
-    //                         }
-    //                         //printAttachment(contactsMessage.getContactsStream());
-    //                         populateAttachmentList( j, contactsMessage.getContactsStream(), "contactStream");
-    //                     }
-    //                     if (syncMessage.getGroups().isPresent()) {
-    //                         System.err.println("Received sync groups");
-    //                         //printAttachment(syncMessage.getGroups().get());
-    //                         populateAttachmentList( j, syncMessage.getGroups().get(), "syncGroups");
-    //                     }
-    //                     if (syncMessage.getRead().isPresent()) {
-    //                         System.err.println("Received sync read messages list");
-    //                         for (ReadMessage rm : syncMessage.getRead().get()) {
-    //                             ContactInfo fromContact = m.getContact(rm.getSender());
-    //                             System.err.println("From: " + (fromContact == null ? "" : "“" + fromContact.name + "” ") + rm.getSender() + " Message timestamp: " + formatTimestamp(rm.getTimestamp()));
-    //                         }
-    //                     }
-    //                     if (syncMessage.getRequest().isPresent()) {
-    //                         System.err.println("Received sync request");
-    //                         if (syncMessage.getRequest().get().isContactsRequest()) {
-    //                             System.err.println(" - contacts request");
-    //                         }
-    //                         if (syncMessage.getRequest().get().isGroupsRequest()) {
-    //                             System.err.println(" - groups request");
-    //                         }
-    //                     }
-    //                     if (syncMessage.getSent().isPresent()) {
-    //                         System.err.println("Received sync sent message");
-    //                         final SentTranscriptMessage sentTranscriptMessage = syncMessage.getSent().get();
-    //                         String to;
-    //                         if (sentTranscriptMessage.getDestination().isPresent()) {
-    //                             String dest = sentTranscriptMessage.getDestination().get();
-    //                             ContactInfo destContact = m.getContact(dest);
-    //                             to = (destContact == null ? "" : "“" + destContact.name + "” ") + dest;
-    //                         } else {
-    //                             to = "Unknown";
-    //                         }
-    //                         System.err.println("To: " + to + " , Message timestamp: " + formatTimestamp(sentTranscriptMessage.getTimestamp()));
-    //                         if (sentTranscriptMessage.getExpirationStartTimestamp() > 0) {
-    //                             System.err.println("Expiration started at: " + formatTimestamp(sentTranscriptMessage.getExpirationStartTimestamp()));
-    //                         }
-    //                         SignalServiceDataMessage message = sentTranscriptMessage.getMessage();
-    //                         handleSignalServiceDataMessage(message, j);
-    //                     }
-    //                     if (syncMessage.getBlockedList().isPresent()) {
-    //                         System.err.println("Received sync message with block list");
-    //                         System.err.println("Blocked numbers:");
-    //                         final BlockedListMessage blockedList = syncMessage.getBlockedList().get();
-    //                         for (String number : blockedList.getNumbers()) {
-    //                             System.err.println(" - " + number);
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         } else {
-    //             System.err.println("Unknown message received.");
-    //             j.type = "unknown";
-    //         }
-
-    //         j.emit();
-    //     }
-
-    //     private void handleSignalServiceDataMessage(SignalServiceDataMessage message, JsonMessage j) {
-    //         //System.err.println("Message timestamp: " + formatTimestamp(message.getTimestamp()));
-
-    //         if (message.getBody().isPresent()) {
-    //             j.messageBody = message.getBody().get();
-    //         }
-    //         if (message.getGroupInfo().isPresent()) {
-    //         	if( message.getBody().get().equals("") && !message.getAttachments().isPresent() ) {
-	   //              j.type = "groupInfo";
-    //         	} else {
-    //         		j.type = "groupMessage";
-    //         	}
-    //             SignalServiceGroup groupInfo = message.getGroupInfo().get();
-    //             j.groupId = Base64.encodeBytes(groupInfo.getGroupId());
-    //             if (groupInfo.getType() == SignalServiceGroup.Type.UPDATE && groupInfo.getName().isPresent()) {
-    //                 j.groupName = groupInfo.getName().get();
-    //             } else {
-    //                 GroupInfo group = m.getGroup(groupInfo.getGroupId());
-    //                 if (group != null) {
-    //                     j.groupName = group.name;
-    //                 } else {
-    //                     j.groupName = "Unknown Group";
-    //                 }
-    //             }
-    //             // System.out.println("  Type: " + groupInfo.getType());
-    //             if (groupInfo.getMembers().isPresent()) {
-    //                 j.groupMembers = new ArrayList<String>();
-    //                 for (String member : groupInfo.getMembers().get()) {
-    //                     j.groupMembers.add(member);
-    //                 }
-    //             }
-    //             if (groupInfo.getAvatar().isPresent()) {
-    //                 populateAttachmentList( j, groupInfo.getAvatar().get(), "avatar");
-    //             }
-    //         }
-    //         if (message.isEndSession()) {
-    //             // System.out.println("Is end session");
-    //         }
-    //         if (message.isExpirationUpdate()) {
-    //             // System.out.println("Is Expiration update: " + message.isExpirationUpdate());
-    //         }
-    //         if (message.getExpiresInSeconds() > 0) {
-    //             // System.out.println("Expires in: " + message.getExpiresInSeconds() + " seconds");
-    //             j.groupMessageExpireTime = Integer.toString(message.getExpiresInSeconds());
-    //         }
-
-    //         if (message.getAttachments().isPresent()) {
-    //             // System.out.println("Attachments: ");
-    //             for (SignalServiceAttachment attachment : message.getAttachments().get()) {
-    //                 // printAttachment(attachment);
-    //                 populateAttachmentList( j, attachment, "attachment");
-    //             }
-    //         }
-    //     }
-
-    //     private void populateAttachmentList( JsonMessage j, SignalServiceAttachment a, String context) {
-    //         if(j.attachments == null) {
-    //             j.attachments = new ArrayList<JsonMessageAttachmentInfo>();
-    //         }
-    //         JsonMessageAttachmentInfo i = new JsonMessageAttachmentInfo();
-    //         //TODO: figure out what this means
-    //         if( a.isPointer()) {
-    //             i.type = "pointer";
-    //         } else if( a.isStream()) {
-    //             i.type = "stream";
-    //         } else {
-    //             i.type = "unknown";
-    //         }
-    //         i.context = context;
-    //         i.contentType = a.getContentType();
-    //         if( a.isPointer()) {
-    //             final SignalServiceAttachmentPointer ptr = a.asPointer();
-    //             i.id = ptr.getId();
-    //             if( ptr.getRelay().isPresent()) 
-    //                 i.relay = ptr.getRelay().get();
-    //             if( ptr.getFileName().isPresent())
-    //                 i.filename = ptr.getFileName().get();
-    //             else
-    //                 i.filename = "-";
-    //             if( ptr.getSize().isPresent())
-    //                 i.sizeBytes = ptr.getSize().get();
-    //             File file = m.getAttachmentFile(ptr.getId());
-    //             if( file.exists()) {
-    //                 i.storedFilename = file.toString();
-    //             }
-    //         }
-    //         j.attachments.add(i);
-    //     }
-
-    //     // private void printAttachment(SignalServiceAttachment attachment) {
-    //     //     System.out.println("- " + attachment.getContentType() + " (" + (attachment.isPointer() ? "Pointer" : "") + (attachment.isStream() ? "Stream" : "") + ")");
-    //     //     if (attachment.isPointer()) {
-    //     //         final SignalServiceAttachmentPointer pointer = attachment.asPointer();
-    //     //         System.out.println("  Id: " + pointer.getId() + " Key length: " + pointer.getKey().length + (pointer.getRelay().isPresent() ? " Relay: " + pointer.getRelay().get() : ""));
-    //     //         System.out.println("  Filename: " + (pointer.getFileName().isPresent() ? pointer.getFileName().get() : "-"));
-    //     //         System.out.println("  Size: " + (pointer.getSize().isPresent() ? pointer.getSize().get() + " bytes" : "<unavailable>") + (pointer.getPreview().isPresent() ? " (Preview is available: " + pointer.getPreview().get().length + " bytes)" : ""));
-    //     //         System.out.println("  Voice note: " + (pointer.getVoiceNote() ? "yes" : "no"));
-    //     //         File file = m.getAttachmentFile(pointer.getId());
-    //     //         if (file.exists()) {
-    //     //             System.out.println("  Stored plaintext in: " + file);
-    //     //         }
-    //     //     }
-    //     // }
-    // }
-
 
     //
     //	Start json event loop mode
     //
-    //  General idea is to provide lightweight API for scripting languages
+    //  General idea is to provide lightweight asynchronous API for scripting languages
     //
-    // 	Main threads receives starts signal receiveMessages and receives all incoming messages and emits json blobs to stdout (line buffered (one line - one json blob))
-    //	New thread starts and reads commands from stdin formatted as json requests (also line buffered)
+    // 	Main thread starts signal receiveMessages and receives all incoming messages and emits json blobs to stdout (line buffered (one line - one json blob))
+    //	New thread starts and reads commands from stdin formatted as json requests (also line buffered) (JsonRequestHandler)
     // 	Errors goes to stderr
     //
-    private static int jsonEvtLoop( Namespace ns, Manager m, Signal ts) {
+    private static int JsonEvtLoop( Namespace ns, Manager m, Signal ts) {
         if (!m.isRegistered()) {
-            //System.out.println("{\"type\": \"error\", \"error\": \"USER_NOT_REGISTERED\", \"message\": \"User not registered\" }");
             new JsonErrorMessage( "USER_NOT_REGISTERED", "User is not registered, please use signal-cli register/verify from commandline", null).emit();
             return 1;
         }
@@ -513,7 +281,6 @@ public class Main {
                 ignoreAttachments = ns.getBoolean("ignore_attachments");
             }
             try {
-                //m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandlerJSON(m));
                 m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new JsonReceiveMessageHandler(m));
             } catch (IOException e) {
                 new JsonErrorMessage( "IO_EXCEPTION_RECEIVING", "IO Exception while receiving messages: " + e.getMessage(), null).emit();
@@ -582,7 +349,7 @@ public class Main {
             switch (ns.getString("command")) {
 
                 case "jsonevtloop":
-                    int r = jsonEvtLoop( ns, m, ts);
+                    int r = JsonEvtLoop( ns, m, ts);
                     break;
 
                 case "register":

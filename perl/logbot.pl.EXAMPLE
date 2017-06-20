@@ -1,0 +1,95 @@
+#!/usr/bin/perl
+
+## Example of simple logging bot. Invite bot to signal groups and then issue
+## command "logbot on" to start logging all conversation in that
+## group to a file (in json format)
+
+use strict;
+use lib '.';
+use SignalCLI;
+use JSON;
+use Storable;
+
+my $state = read_state();
+
+## NOTE: telephone_number is the "bots" telephone number (its signal identity)
+## Identity needs to have been registered first using signal-cli commandline
+## see https://github.com/AsamK/signal-cli#usage
+##
+my $s = new SignalCLI( 'telephone_number' => '+1234', 'debug' => 1 );
+
+## send message 
+## (wait until signal-cli has started and emits the evtloop_start event)
+$s->on('jsonevtloop_start', sub {
+	## send message 
+	$s->send_message( "+2345", undef, undef, "Logbot started!");
+});
+
+## handle incoming direct messages
+$s->on('message', sub {
+	my($r) = @_;
+	if( lc($r->{'envelope'}->{'dataMessage'}->{'message'}) eq "die") {
+		$s->reply( $r, undef, "Ok, shutting down", sub { $s->exit(); });
+	} else {
+		$s->reply( $r, undef, "The heck you say!");
+	}
+});
+
+## handle incoming group messages
+$s->on('groupMessage', sub {
+	my($r) = @_;
+	my $groupId = $r->{'envelope'}->{'dataMessage'}->{'groupInfo'}->{'groupId'};
+	my $messageBody = $r->{'envelope'}->{'dataMessage'}->{'message'};
+	if( !exists $state->{'groups'}->{$groupId}) {
+		print "logbot: new group: ".$groupId."\n";
+		$state->{'groups'}->{$groupId} = {
+			'groupName' => $r->{'envelope'}->{'dataMessage'}->{'groupInfo'}->{'name'},
+			'logging' => 0,
+			'msgcount' => 0
+		};
+		$s->reply( $r, undef, "logbot: New group, logging is off");
+	} elsif( $messageBody =~ m/^logbot on/i) {
+		$state->{'groups'}->{$groupId}->{'logging'} = 1;
+		$s->reply( $r, undef, "logbot: Logging is turned ON");
+	} elsif( $messageBody =~ m/^logbot off/i) {
+		$state->{'groups'}->{$groupId}->{'logging'} = 0;
+		$s->reply( $r, undef, "logbot: Logging is turned OFF");
+	} elsif( $messageBody =~ m/^logbot status/i) {
+		my $i = $state->{'groups'}->{$groupId};
+		$s->reply( $r, undef, "logbot: Logging is currently ".($i->{'logging'} ? 'ON' : 'OFF').", ".$i->{'msgcount'}." messages logged" );
+	} elsif( $messageBody =~ m/^logbot/i) {
+		$s->reply( $r, undef, "logbot: Invalid command.\nValid commands:\nlogbot on|off|status");
+	}
+	if( exists $state->{'groups'}->{$groupId} && $state->{'groups'}->{$groupId}->{'logging'}) {
+		my $fn = "grouplog_".$groupId.".json";
+		open( FILE, ">>", $fn);
+		print FILE encode_json($r)."\n";
+		close(FILE);
+		$state->{'groups'}->{$groupId}->{'msgcount'}++;
+	}
+
+	write_state($state);
+});
+
+## start event loop and run forever (or until exit)
+$s->run();
+
+
+sub read_state {
+	my $state;
+	if( -e 'logbot.state') {
+		$state = retrieve('logbot.state');
+	}
+	if( !defined $state) {
+		$state = {};
+		print STDERR "Warning: could not read state file logbot.state\n";
+	}
+	return $state;
+}
+
+sub write_state {
+	my($state) = @_;
+	store( $state, 'logbot.state');
+}
+
+

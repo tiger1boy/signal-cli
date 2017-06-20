@@ -1,6 +1,9 @@
 #!/usr/bin/perl
 
-## PERL event loop driven interface for signal-cli
+## PERL event loop (EV) driven interface for signal-cli
+
+# Non standard module dependencies: 
+#	EV
 
 # /**
 #  * Copyright (C) 2017 Carl Bingel
@@ -34,6 +37,7 @@ use Data::Dumper;
 ##		signal_cli_executable (Optional) Path to signal-cli executable, default to current build path (../build/install/signal-cli/bin/signal-cli) TODO: fix this to better default
 ##		ev_loop				(Optional) EV loop object, defaulting to "default event loop"
 ##		debug 				(Optional) Turn on debug logging (to stderr)
+##		debug_io			(Optional) Dump all incoming/outgoing JSON data structures
 ##
 sub new {
 	my( $class, %opts) = @_;
@@ -46,6 +50,7 @@ sub new {
 		exit(1);
 	}
 	$self->{'debug'} = $opts{'debug'};
+	$self->{'debug_io'} = $opts{'debug_io'};
 
 	## Default event handlers
 	$self->{'cblist'}->{'message'} = 
@@ -69,6 +74,10 @@ sub new {
 		$self->{'last_alive'} = localtime();
 	};
 	$self->{'cblist'}->{'jsonevtloop_exit'} = sub {
+	};
+	$self->{'cblist'}->{'groupInfo'} = sub {
+		my( $request) = @_;
+		$self->handle_groupInfo($request);
 	};
 
 
@@ -99,7 +108,7 @@ sub new {
 		#my $line;
 		chomp($line);
 		return if( $line eq "");
-		print STDERR "DEBUG(JSON-IN): ".$line."\n" if( $self->{'debug'});
+		print STDERR "DEBUG(JSON-IN): ".$line."\n" if( $self->{'debug_io'});
 		if( $line ne "") {
 			my $msg = decode_json($line);
 			#my $msg = from_json($line);
@@ -129,14 +138,6 @@ sub new {
 		exit($exit_value);
 	});
 
-	## Dummy test, exit after 10 seconds
-	#$self->{'timer1'} = $self->{'ev_loop'}->timer( 10, 0, sub {
-	#	my( $w, $revents) = @_;
-	#	#print { $self->{'signal_cli_stdin'} } "{\"type\":\"exit\"}\n";
-	#	print STDERR "timer1\n";
-	#	$self->submit_request( { 'type' => 'exit' } );
-	#});
-
 	return $self;
 }
 
@@ -149,9 +150,11 @@ sub EV {
 sub submit_request {
 	my( $self, $request) = @_;
 	my $json = encode_json($request);
-	print STDERR "DEBUG(JSON-OUT): ".$json."\n" if( $self->{'debug'});
+	print STDERR "DEBUG(JSON-OUT): ".$json."\n" if( $self->{'debug_io'});
 	print {$self->{'signal_cli_stdin'}} $json."\n";
 }
+
+## EXAMPLES of incoming messages
 
 # direct message
 # {
@@ -252,7 +255,7 @@ sub submit_request {
 sub handle_incoming {
 	my( $self, $msg) = @_;
 
-	print STDERR "DEBUG(JSON-Parsed Dump): ".Dumper($msg)."\n" if( $self->{'debug'});
+	print STDERR "DEBUG(JSON-Parsed Dump): ".Dumper($msg)."\n" if( $self->{'debug_io'});
 	
 	##
 	## Determine message type and refine event to: message, groupMessage, receipt, groupInfo
@@ -307,6 +310,14 @@ sub handle_receipt {
 	print STDERR "SignalCLI::handle_receipt senderNumber='".$request->{'envelope'}->{'source'}."', timestamp='".$request->{'envelope'}->{'timestampISO'}."'\n" if( $self->{'debug'});
 	## TODO: since we don't have a message ID for the message sent, we can not map receipts received to an actual sent message which would be highly conveniant
 	##	underlying shortcoming of signal-cli and I haven't had the time to figure out how that works (yet) //Kalle
+}
+
+sub handle_groupInfo {
+	my( $self, $r) = @_;
+	if( $self->{'debug'}) {
+		my $gi = $r->{'envelope'}->{'dataMessage'}->{'groupInfo'};
+		print STDERR "SignalCLI::handle_groupInfo groupId='".$gi->{'groupId'}."', groupName='".$gi->{'name'}."', members: [".join(",", @{$gi->{'members'}})."]\n";
+	}
 }
 
 sub reply {
@@ -392,7 +403,7 @@ sub on_timer {
 }
 
 
-
+## start event loop
 sub run {
 	my( $self) = @_;
 	$self->{'ev_loop'}->run();
