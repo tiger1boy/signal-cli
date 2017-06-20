@@ -35,7 +35,6 @@ import org.asamk.signal.storage.protocol.JsonIdentityKeyStore;
 import org.asamk.signal.storage.protocol.JsonSignalProtocolStore;
 import org.asamk.signal.storage.threads.JsonThreadStore;
 import org.asamk.signal.storage.threads.ThreadInfo;
-import org.asamk.signal.util.Base64;
 import org.asamk.signal.util.Util;
 import org.whispersystems.libsignal.*;
 import org.whispersystems.libsignal.ecc.Curve;
@@ -64,6 +63,7 @@ import org.whispersystems.signalservice.api.util.InvalidNumberException;
 import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos;
 import org.whispersystems.signalservice.internal.push.SignalServiceUrl;
+import org.whispersystems.signalservice.internal.util.Base64;
 
 import java.io.*;
 import java.net.URI;
@@ -96,7 +96,7 @@ class Manager implements Signal {
 
     private final static int PREKEY_MINIMUM_COUNT = 20;
     private static final int PREKEY_BATCH_SIZE = 100;
-    private static final int MAX_ATTACHMENT_SIZE = 150 * 1024  * 1024;
+    private static final int MAX_ATTACHMENT_SIZE = 150 * 1024 * 1024;
 
     private final String settingsPath;
     private final String dataPath;
@@ -559,7 +559,7 @@ class Manager implements Signal {
             mime = "application/octet-stream";
         }
         // TODO mabybe add a parameter to set the voiceNote and preview option
-        return new SignalServiceAttachmentStream(attachmentStream, mime, attachmentSize, Optional.of(attachmentFile.getName()), false, Optional.<byte[]>absent(),null);
+        return new SignalServiceAttachmentStream(attachmentStream, mime, attachmentSize, Optional.of(attachmentFile.getName()), false, Optional.<byte[]>absent(), null);
     }
 
     private Optional<SignalServiceAttachmentStream> createGroupAvatarAttachment(byte[] groupId) throws IOException {
@@ -807,9 +807,9 @@ class Manager implements Signal {
         if (contact == null) {
             contact = new ContactInfo();
             contact.number = number;
-            System.out.println("Add contact " + number + " named " + name);
+            System.err.println("Add contact " + number + " named " + name);
         } else {
-            System.out.println("Updating contact " + number + " name " + contact.name + " -> " + name);
+            System.err.println("Updating contact " + number + " name " + contact.name + " -> " + name);
         }
         contact.name = name;
         contactStore.updateContact(contact);
@@ -1113,9 +1113,11 @@ class Manager implements Signal {
                 try {
                     Files.delete(fileEntry.toPath());
                 } catch (IOException e) {
-                    System.out.println("Failed to delete cached message file “" + fileEntry + "”: " + e.getMessage());
+                    System.err.println("Failed to delete cached message file “" + fileEntry + "”: " + e.getMessage());
                 }
             }
+            // Try to delete directory if empty
+            dir.delete();
         }
     }
 
@@ -1169,8 +1171,10 @@ class Manager implements Signal {
                     try {
                         cacheFile = getMessageCacheFile(envelope.getSource(), now, envelope.getTimestamp());
                         Files.delete(cacheFile.toPath());
+                        // Try to delete directory if empty
+                        new File(getMessageCachePath()).delete();
                     } catch (IOException e) {
-                        System.out.println("Failed to delete cached message file “" + cacheFile + "”: " + e.getMessage());
+                        System.err.println("Failed to delete cached message file “" + cacheFile + "”: " + e.getMessage());
                     }
                 }
             }
@@ -1199,6 +1203,7 @@ class Manager implements Signal {
                     if (rm.isContactsRequest()) {
                         try {
                             sendContacts();
+                            sendVerifiedMessage();
                         } catch (UntrustedIdentityException | IOException e) {
                             e.printStackTrace();
                         }
@@ -1215,23 +1220,25 @@ class Manager implements Signal {
                     File tmpFile = null;
                     try {
                         tmpFile = Util.createTempFile();
-                        DeviceGroupsInputStream s = new DeviceGroupsInputStream(retrieveAttachmentAsStream(syncMessage.getGroups().get().asPointer(), tmpFile));
-                        DeviceGroup g;
-                        while ((g = s.read()) != null) {
-                            GroupInfo syncGroup = groupStore.getGroup(g.getId());
-                            if (syncGroup == null) {
-                                syncGroup = new GroupInfo(g.getId());
-                            }
-                            if (g.getName().isPresent()) {
-                                syncGroup.name = g.getName().get();
-                            }
-                            syncGroup.members.addAll(g.getMembers());
-                            syncGroup.active = g.isActive();
+                        try (InputStream attachmentAsStream = retrieveAttachmentAsStream(syncMessage.getGroups().get().asPointer(), tmpFile)) {
+                            DeviceGroupsInputStream s = new DeviceGroupsInputStream(attachmentAsStream);
+                            DeviceGroup g;
+                            while ((g = s.read()) != null) {
+                                GroupInfo syncGroup = groupStore.getGroup(g.getId());
+                                if (syncGroup == null) {
+                                    syncGroup = new GroupInfo(g.getId());
+                                }
+                                if (g.getName().isPresent()) {
+                                    syncGroup.name = g.getName().get();
+                                }
+                                syncGroup.members.addAll(g.getMembers());
+                                syncGroup.active = g.isActive();
 
-                            if (g.getAvatar().isPresent()) {
-                                retrieveGroupAvatarAttachment(g.getAvatar().get(), syncGroup.groupId);
+                                if (g.getAvatar().isPresent()) {
+                                    retrieveGroupAvatarAttachment(g.getAvatar().get(), syncGroup.groupId);
+                                }
+                                groupStore.updateGroup(syncGroup);
                             }
-                            groupStore.updateGroup(syncGroup);
                         }
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -1240,7 +1247,7 @@ class Manager implements Signal {
                             try {
                                 Files.delete(tmpFile.toPath());
                             } catch (IOException e) {
-                                System.out.println("Failed to delete temp file “" + tmpFile + "”: " + e.getMessage());
+                                System.err.println("Failed to delete received groups temp file “" + tmpFile + "”: " + e.getMessage());
                             }
                         }
                     }
@@ -1253,27 +1260,29 @@ class Manager implements Signal {
                     try {
                         tmpFile = Util.createTempFile();
                         final ContactsMessage contactsMessage = syncMessage.getContacts().get();
-                        DeviceContactsInputStream s = new DeviceContactsInputStream(retrieveAttachmentAsStream(contactsMessage.getContactsStream().asPointer(), tmpFile));
-                        if (contactsMessage.isComplete()) {
-                            contactStore.clear();
-                        }
-                        DeviceContact c;
-                        while ((c = s.read()) != null) {
-                            ContactInfo contact = contactStore.getContact(c.getNumber());
-                            if (contact == null) {
-                                contact = new ContactInfo();
-                                contact.number = c.getNumber();
+                        try (InputStream attachmentAsStream = retrieveAttachmentAsStream(contactsMessage.getContactsStream().asPointer(), tmpFile)) {
+                            DeviceContactsInputStream s = new DeviceContactsInputStream(attachmentAsStream);
+                            if (contactsMessage.isComplete()) {
+                                contactStore.clear();
                             }
-                            if (c.getName().isPresent()) {
-                                contact.name = c.getName().get();
-                            }
-                            if (c.getColor().isPresent()) {
-                                contact.color = c.getColor().get();
-                            }
-                            contactStore.updateContact(contact);
+                            DeviceContact c;
+                            while ((c = s.read()) != null) {
+                                ContactInfo contact = contactStore.getContact(c.getNumber());
+                                if (contact == null) {
+                                    contact = new ContactInfo();
+                                    contact.number = c.getNumber();
+                                }
+                                if (c.getName().isPresent()) {
+                                    contact.name = c.getName().get();
+                                }
+                                if (c.getColor().isPresent()) {
+                                    contact.color = c.getColor().get();
+                                }
+                                contactStore.updateContact(contact);
 
-                            if (c.getAvatar().isPresent()) {
-                                retrieveContactAvatarAttachment(c.getAvatar().get(), contact.number);
+                                if (c.getAvatar().isPresent()) {
+                                    retrieveContactAvatarAttachment(c.getAvatar().get(), contact.number);
+                                }
                             }
                         }
                     } catch (Exception e) {
@@ -1283,9 +1292,15 @@ class Manager implements Signal {
                             try {
                                 Files.delete(tmpFile.toPath());
                             } catch (IOException e) {
-                                System.out.println("Failed to delete temp file “" + tmpFile + "”: " + e.getMessage());
+                                System.err.println("Failed to delete received contacts temp file “" + tmpFile + "”: " + e.getMessage());
                             }
                         }
+                    }
+                }
+                if (syncMessage.getVerified().isPresent()) {
+                    final List<VerifiedMessage> verifiedList = syncMessage.getVerified().get();
+                    for (VerifiedMessage v : verifiedList) {
+                        signalProtocolStore.saveIdentity(v.getDestination(), v.getIdentityKey(), TrustLevel.fromVerifiedState(v.getVerified()));
                     }
                 }
             }
@@ -1432,7 +1447,7 @@ class Manager implements Signal {
             try {
                 Files.delete(tmpFile.toPath());
             } catch (IOException e) {
-                System.out.println("Failed to delete temp file “" + tmpFile + "”: " + e.getMessage());
+                System.err.println("Failed to delete received attachment temp file “" + tmpFile + "”: " + e.getMessage());
             }
         }
         return outputFile;
@@ -1486,7 +1501,7 @@ class Manager implements Signal {
             try {
                 Files.delete(groupsFile.toPath());
             } catch (IOException e) {
-                System.out.println("Failed to delete temp file “" + groupsFile + "”: " + e.getMessage());
+                System.err.println("Failed to delete groups temp file “" + groupsFile + "”: " + e.getMessage());
             }
         }
     }
@@ -1518,9 +1533,29 @@ class Manager implements Signal {
             try {
                 Files.delete(contactsFile.toPath());
             } catch (IOException e) {
-                System.out.println("Failed to delete temp file “" + contactsFile + "”: " + e.getMessage());
+                System.err.println("Failed to delete contacts temp file “" + contactsFile + "”: " + e.getMessage());
             }
         }
+    }
+
+    private void sendVerifiedMessage() throws IOException, UntrustedIdentityException {
+        List<VerifiedMessage> verifiedMessages = new LinkedList<>();
+        for (Map.Entry<String, List<JsonIdentityKeyStore.Identity>> x : getIdentities().entrySet()) {
+            final String name = x.getKey();
+            for (JsonIdentityKeyStore.Identity id : x.getValue()) {
+                if (id.getTrustLevel() == TrustLevel.TRUSTED_UNVERIFIED) {
+                    continue;
+                }
+                VerifiedMessage verifiedMessage = new VerifiedMessage(name, id.getIdentityKey(), id.getTrustLevel().toVerifiedState());
+                verifiedMessages.add(verifiedMessage);
+            }
+        }
+        sendSyncMessage(SignalServiceSyncMessage.forVerified(verifiedMessages));
+    }
+
+    private void sendVerifiedMessage(String destination, IdentityKey identityKey, TrustLevel trustLevel) throws IOException, UntrustedIdentityException {
+        VerifiedMessage verifiedMessage = new VerifiedMessage(destination, identityKey, trustLevel.toVerifiedState());
+        sendSyncMessage(SignalServiceSyncMessage.forVerified(verifiedMessage));
     }
 
     public ContactInfo getContact(String number) {
@@ -1556,6 +1591,11 @@ class Manager implements Signal {
             }
 
             signalProtocolStore.saveIdentity(name, id.getIdentityKey(), TrustLevel.TRUSTED_VERIFIED);
+            try {
+                sendVerifiedMessage(name, id.getIdentityKey(), TrustLevel.TRUSTED_VERIFIED);
+            } catch (IOException | UntrustedIdentityException e) {
+                e.printStackTrace();
+            }
             save();
             return true;
         }
@@ -1579,6 +1619,11 @@ class Manager implements Signal {
             }
 
             signalProtocolStore.saveIdentity(name, id.getIdentityKey(), TrustLevel.TRUSTED_VERIFIED);
+            try {
+                sendVerifiedMessage(name, id.getIdentityKey(), TrustLevel.TRUSTED_VERIFIED);
+            } catch (IOException | UntrustedIdentityException e) {
+                e.printStackTrace();
+            }
             save();
             return true;
         }
@@ -1598,6 +1643,11 @@ class Manager implements Signal {
         for (JsonIdentityKeyStore.Identity id : ids) {
             if (id.getTrustLevel() == TrustLevel.UNTRUSTED) {
                 signalProtocolStore.saveIdentity(name, id.getIdentityKey(), TrustLevel.TRUSTED_UNVERIFIED);
+                try {
+                    sendVerifiedMessage(name, id.getIdentityKey(), TrustLevel.TRUSTED_UNVERIFIED);
+                } catch (IOException | UntrustedIdentityException e) {
+                    e.printStackTrace();
+                }
             }
         }
         save();

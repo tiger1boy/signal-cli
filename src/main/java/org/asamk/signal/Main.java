@@ -16,6 +16,13 @@
  */
 package org.asamk.signal;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.annotation.PropertyAccessor;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.impl.Arguments;
 import net.sourceforge.argparse4j.inf.*;
@@ -24,7 +31,6 @@ import org.asamk.Signal;
 import org.asamk.signal.storage.contacts.ContactInfo;
 import org.asamk.signal.storage.groups.GroupInfo;
 import org.asamk.signal.storage.protocol.JsonIdentityKeyStore;
-import org.asamk.signal.util.Base64;
 import org.asamk.signal.util.Hex;
 import org.freedesktop.dbus.DBusConnection;
 import org.freedesktop.dbus.DBusSigHandler;
@@ -39,6 +45,7 @@ import org.whispersystems.signalservice.api.push.exceptions.EncapsulatedExceptio
 import org.whispersystems.signalservice.api.push.exceptions.NetworkFailureException;
 import org.whispersystems.signalservice.api.push.exceptions.UnregisteredUserException;
 import org.whispersystems.signalservice.api.util.PhoneNumberFormatter;
+import org.whispersystems.signalservice.internal.util.Base64;
 
 import com.google.gson.Gson;
 
@@ -921,6 +928,13 @@ public class Main {
                                     System.out.println();
                                 }
                             });
+                            dBusConn.addSigHandler(Signal.ReceiptReceived.class, new DBusSigHandler<Signal.ReceiptReceived>() {
+                                @Override
+                                public void handle(Signal.ReceiptReceived s) {
+                                    System.out.print(String.format("Receipt from: %s\nTimestamp: %s\n",
+                                            s.getSender(), formatTimestamp(s.getTimestamp())));
+                                }
+                            });
                         } catch (UnsatisfiedLinkError e) {
                             System.err.println("Missing native library dependency for dbus service: " + e.getMessage());
                             return 1;
@@ -951,7 +965,8 @@ public class Main {
                     }
                     boolean ignoreAttachments = ns.getBoolean("ignore_attachments");
                     try {
-                        m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, new ReceiveMessageHandler(m));
+                        final Manager.ReceiveMessageHandler handler = ns.getBoolean("json") ? new JsonReceiveMessageHandler(m) : new ReceiveMessageHandler(m);
+                        m.receiveMessages((long) (timeout * 1000), TimeUnit.MILLISECONDS, returnOnTimeout, ignoreAttachments, handler);
                     } catch (IOException e) {
                         System.err.println("Error while receiving messages: " + e.getMessage());
                         return 3;
@@ -1356,6 +1371,9 @@ public class Main {
         parserReceive.addArgument("--ignore-attachments")
                 .help("Don’t download attachments of received messages.")
                 .action(Arguments.storeTrue());
+        parserReceive.addArgument("--json")
+                .help("Output received messages in json format, one json object per line.")
+                .action(Arguments.storeTrue());
 
         Subparser parserDaemon = subparsers.addParser("daemon");
         parserDaemon.addArgument("--system")
@@ -1526,6 +1544,16 @@ public class Main {
                                 System.out.println(" - " + number);
                             }
                         }
+                        if (syncMessage.getVerified().isPresent()) {
+                            System.out.println("Received sync message with verified identities:");
+                            final List<VerifiedMessage> verifiedList = syncMessage.getVerified().get();
+                            for (VerifiedMessage v : verifiedList) {
+                                System.out.println(" - " + v.getDestination() + ": " + v.getVerified());
+                                String safetyNumber = formatSafetyNumber(m.computeSafetyNumber(v.getDestination(), v.getIdentityKey()));
+                                System.out.println("   " + safetyNumber);
+                            }
+
+                        }
                     }
                 }
             } else {
@@ -1611,7 +1639,17 @@ public class Main {
         public void handleMessage(SignalServiceEnvelope envelope, SignalServiceContent content, Throwable exception) {
             super.handleMessage(envelope, content, exception);
 
-            if (!envelope.isReceipt() && content != null && content.getDataMessage().isPresent()) {
+            if (envelope.isReceipt()) {
+                try {
+                    conn.sendSignal(new Signal.ReceiptReceived(
+                            SIGNAL_OBJECTPATH,
+                            envelope.getTimestamp(),
+                            envelope.getSource()
+                    ));
+                } catch (DBusException e) {
+                    e.printStackTrace();
+                }
+            } else if (content != null && content.getDataMessage().isPresent()) {
                 SignalServiceDataMessage message = content.getDataMessage().get();
 
                 if (!message.isEndSession() &&
@@ -1640,7 +1678,37 @@ public class Main {
                 }
             }
         }
+    }
 
+    private static class JsonReceiveMessageHandler implements Manager.ReceiveMessageHandler {
+        final Manager m;
+        final ObjectMapper jsonProcessor;
+
+        public JsonReceiveMessageHandler(Manager m) {
+            this.m = m;
+            this.jsonProcessor = new ObjectMapper();
+            jsonProcessor.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY); // disable autodetect
+            jsonProcessor.enable(SerializationFeature.WRITE_NULL_MAP_VALUES);
+            jsonProcessor.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+            jsonProcessor.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
+        }
+
+        @Override
+        public void handleMessage(SignalServiceEnvelope envelope, SignalServiceContent content, Throwable exception) {
+            ObjectNode result = jsonProcessor.createObjectNode();
+            if (exception != null) {
+                result.putPOJO("error", new JsonError(exception));
+            }
+            if (envelope != null) {
+                result.putPOJO("envelope", new JsonMessageEnvelope(envelope, content));
+            }
+            try {
+                jsonProcessor.writeValue(System.out, result);
+                System.out.println();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     private static String formatTimestamp(long timestamp) {
