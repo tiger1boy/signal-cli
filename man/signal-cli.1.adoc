@@ -207,6 +207,16 @@ libunixsocket-java ArchLinux: libmatthew-unix-java (AUR)).
 	Don’t download attachments of received messages.
 
 
+jsonevtloop
+~~~~~~~~~~~
+signal-cli can also run in jsonevtloop mode. This is primarily intended to provide a scriptable
+asynchronous API for signal-cli. When started in this mode, signal-cli listens for special json formatted requests on 
+stdin and received messages/events from the signal back-end are formatted as json and sent to stdout.
+This continues forever in a loop until SIGINT/TERM is received or the special exit request command is encountered.
+
+See README.jsonevtloop.txt for more details.
+
+
 Examples
 --------
 
