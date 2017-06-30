@@ -200,9 +200,11 @@ public class Main {
                     break;
                 case "exit":
                     System.err.println("signal-cli: Exiting event loop on exit request");
-                    new JsonStatusReport("jsonevtloop_exit", null, null).emit();
+                    new JsonStatusReport("jsonevtloop_exit", req.id, null).emit();
                     System.exit(0);
                     break;
+                case "alive_req":
+                    new JsonStatusReport( "jsonevtloop_alive", req.id, null).emit();
                 default:
                     System.err.println("ERROR: Unknown JsonRequest type '" + req.type + "'");
             }
@@ -228,7 +230,8 @@ public class Main {
                 try {
                     line = br.readLine();
                 } catch( IOException e) {
-                    System.err.println("ERROR Reading stdin: " + e.toString());
+                    System.err.println("ERROR Reading stdin: " + e.toString() + ", exiting");
+                    System.exit(1);
                 }
                 if( line != null && !line.equals(""))
                     this.jsonRequestHandler.handle(line);
@@ -339,6 +342,9 @@ public class Main {
                 if (m.userExists()) {
                     try {
                         m.init();
+                    } catch (org.whispersystems.signalservice.api.push.exceptions.AuthorizationFailedException e) {
+                        // We should not continue after this, methinks...?
+                        return 2;
                     } catch (Exception e) {
                         System.err.println("Error loading state file \"" + m.getFileName() + "\": " + e.getMessage());
                         return 2;

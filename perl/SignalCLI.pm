@@ -205,6 +205,41 @@ sub submit_request {
 # 	'type' => 'message'
 # };
 
+# group message with attachment
+# {
+#     "type": "message",
+#     "envelope": {
+#     "callMessage": null,
+#     "source": "+1234",
+#     "sourceDevice": 1,
+#     "relay": null,
+#     "timestamp": 1498034590185,
+#     "timestampISO": "2017-06-21T08:43:10.185Z",
+#     "isReceipt": false,
+#     "dataMessage": {
+#         "groupInfo": {
+#             "type": "DELIVER",
+#             "name": "testgruppen testabbet",
+#             "members": null,
+#             "groupId": "hyo+GHM6IlVAxab348n6kQ=="
+#         },
+#         "attachments": [
+#             {
+#                 "storedFilename": "/home/kk/.config/signal/attachments/3418098425625037690",
+#                 "size": 3803076,
+#                 "id": 3418098425625038000,
+#                 "contentType": "image/jpeg"
+#             }
+#         ],
+#         "expiresInSeconds": 86400,
+#         "message": "",
+#         "timestamp": 1498034590185
+#     },
+#     "syncMessage": null
+#     }
+# }
+
+
 # receipt
 # {
 #   'envelope' => {
