@@ -301,6 +301,8 @@ sub handle_incoming {
 		$msg->{'type'} = "groupMessage";
 	} elsif( $msg->{'type'} eq "message" && $msg->{'envelope'}->{'isReceipt'}) {
 		$msg->{'type'} = "receipt";
+	} elsif( $msg->{'type'} eq "message" && !exists $msg->{'envelope'}->{'dataMessage'}->{'message'}) {
+		$msg->{'type'} = "empty";
 	}
 	print STDERR "DEBUG: msg->{'type'}: ".$msg->{'type'}."\n" if( $self->{'debug'});
 
