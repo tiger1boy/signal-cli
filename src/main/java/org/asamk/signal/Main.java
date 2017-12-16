@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import net.sourceforge.argparse4j.ArgumentParsers;
 import net.sourceforge.argparse4j.impl.Arguments;
 import net.sourceforge.argparse4j.inf.*;
@@ -91,12 +92,14 @@ public class Main {
     //	Handles incoming json requests (called from JsonStdinReader in stdin reader thread)
     //
     private static class JsonRequestHandler {
+
         private Manager m;
         private Signal ts;
         private ObjectMapper mpr;
+        private ObjectMapper jsonProcessor;
 
         //
-        // request-type:send 
+        // request-type:send
         // Send Signal message to recipient number or groupId
         //
         int sendMessage( JsonRequest req) {
@@ -175,6 +178,36 @@ public class Main {
             return 0;
         }
 
+        void updateGroup(JsonRequest req) {
+            try {
+                byte[] groupId = decodeGroupId(req.groupId);
+
+                String name = "";
+                if(req.name != null) {
+                  name = req.name;
+                }
+
+                String avatar = "";
+                if(req.avatar != null) {
+                    avatar = req.avatar;
+                }
+
+              List<String> members = new ArrayList<String>();
+                if(req.members != null) {
+                    members = req.members;
+                }
+
+                ObjectNode result = this.jsonProcessor.createObjectNode();
+                byte[] newGroupId = this.ts.updateGroup(groupId, name, members, avatar);
+                this.jsonProcessor.writeValue(System.out, result);
+                System.out.println();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch(EncapsulatedExceptions e) {
+                e.printStackTrace();
+            }
+        }
+
         // Parse JSON and dispatch actions
         void handle( String line) {
             //sendMessage(line);
@@ -198,10 +231,35 @@ public class Main {
                 case "send":
                     sendMessage(req);
                     break;
+                case "update_group":
+                  updateGroup(req);
+                  break;
                 case "exit":
                     System.err.println("signal-cli: Exiting event loop on exit request");
                     new JsonStatusReport("jsonevtloop_exit", req.id, null).emit();
                     System.exit(0);
+                    break;
+                case "list_groups":
+                    ObjectNode result = this.jsonProcessor.createObjectNode();
+                    List<GroupInfo> groups = m.getGroups();
+                    ArrayNode array = result.putArray("groups");
+                    result.put("type", "group_list");
+                    for (GroupInfo group : groups) {
+                        ObjectNode groupObject = this.jsonProcessor.createObjectNode();
+                        groupObject.put("name", group.name);
+                        groupObject.put("group_id", group.groupId);
+                        ArrayNode members = groupObject.putArray("members");
+                        for (String member :  group.members) {
+                            members.add(member);
+                        }
+                        array.add(groupObject);
+                    }
+                    try {
+                        this.jsonProcessor.writeValue(System.out, result);
+                        System.out.println();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                     break;
                 case "alive_req":
                     new JsonStatusReport( "jsonevtloop_alive", req.id, null).emit();
@@ -214,6 +272,11 @@ public class Main {
             this.m = m;
             this.ts = ts;
             this.mpr = new ObjectMapper();
+            this.jsonProcessor = new ObjectMapper();
+            this.jsonProcessor.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY); // disable autodetect
+            this.jsonProcessor.enable(SerializationFeature.WRITE_NULL_MAP_VALUES);
+            this.jsonProcessor.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+            this.jsonProcessor.disable(JsonGenerator.Feature.AUTO_CLOSE_TARGET);
         }
     }
 
@@ -1238,13 +1301,10 @@ public class Main {
                         }
                         if (syncMessage.getVerified().isPresent()) {
                             System.out.println("Received sync message with verified identities:");
-                            final List<VerifiedMessage> verifiedList = syncMessage.getVerified().get();
-                            for (VerifiedMessage v : verifiedList) {
-                                System.out.println(" - " + v.getDestination() + ": " + v.getVerified());
-                                String safetyNumber = formatSafetyNumber(m.computeSafetyNumber(v.getDestination(), v.getIdentityKey()));
-                                System.out.println("   " + safetyNumber);
-                            }
-
+                            final VerifiedMessage verifiedMessage = syncMessage.getVerified().get();
+                            System.out.println(" - " + verifiedMessage.getDestination() + ": " + verifiedMessage.getVerified());
+                            String safetyNumber = formatSafetyNumber(m.computeSafetyNumber(verifiedMessage.getDestination(), verifiedMessage.getIdentityKey()));
+                            System.out.println("   " + safetyNumber);
                         }
                     }
                 }
