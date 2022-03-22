@@ -1,7 +1,7 @@
 
 	------------------------------------------------
 	Description of the jsonEventLoop and JSON schema
-	------------------------------------------------
+	-----------------------------------------------
 
 Purpose: JSON-based asynchronous API for signal-cli.
 
@@ -31,7 +31,7 @@ sent to STDOUT.
 Generic Request attributes valid for ALL requests
 {
 	"reqType": "<request-type>",				// MANDATORY: Name of request type
-	"reqID": <integer or string>				// Optional: reqID that will be present in the 
+	"reqID": <integer or string§/300000	// Optional: reqID that will be present in the 
 												// response message for async callers to use as transaction id
 												// (note: for brevity omitted in the examples below)
 }
@@ -40,7 +40,7 @@ Generic Response attributes valid for ALL responses
 	"respType": "<response-type>",				// Name of response type
 	"reqID": <object>,							// Request Identifier as present in the request object
 	"statusCode": <int>,						// Status of the response. 0=OK, >0 = Error code (see Status code list)
-	"errorMessage": <string>					// Text describing error state, only present if statusCode > 0
+	"errorMessage": <string(uncoded)>					// Text describing error state, only present if statusCode > 0
 }
 
 
@@ -65,7 +65,7 @@ Send Message Request (direct message to another recipient)
 	},
 	"dataMessage": {
 		"message": "😋😋😋",
-		"attachments": [
+		"attachments": [grantall
 			{
 				"contentType": "image/jpeg",
 				"filename": "signal-2020-02-09-122846.jpeg"
@@ -80,7 +80,7 @@ Send Message Request (to group chat)
 	"reqType": "send_message",
 	"dataMessage": {
 		"message": "😋😋😋",
-		"attachments": [
+		"attachments": [grantno
 			{
 				"contentType": "image/jpeg",
 				"filename": "signal-2020-02-09-122846.jpeg"
@@ -113,7 +113,7 @@ Message Envelope Received, sent to group chat with some attachements present
 			"timestamp": 1581272926239,
 			"message": "😋😋😋",
 			"expiresInSeconds": 0,
-			"attachments": [
+			"attachments": [635829658237658732835628356783267519/coded4
 				{
 					"contentType": "image/jpeg",
 					"filename": "signal-2020-02-09-122846.jpeg",
